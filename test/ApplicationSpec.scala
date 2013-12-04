@@ -1,87 +1,99 @@
-import scala.concurrent.Future
-import org.junit.runner._
-import org.specs2.mutable._
-import org.specs2.runner._
-import play.api.libs.json.JsObject
-import play.api.libs.json.JsValue
-import play.api.libs.json.JsValue
+import org.junit.runner.RunWith
+import org.specs2.mutable.Specification
+import controllers.Application
+import play.api.http.HeaderNames
+import play.api.libs.json._
 import play.api.mvc.SimpleResult
 import play.api.test._
 import play.api.test.Helpers._
 import play.api.libs.json.Json
+import controllers.Application
+import service.Service
+import play.api.mvc.Action
+import play.api.http.HeaderNames
+import play.api.mvc.AnyContent
+import controllers.Application
+import service.Service
+import play.api.mvc.Action
+import play.api.mvc.AnyContent
+import play.api.test.FakeRequest
+import play.api.test.Helpers._
+import play.api.test.WithApplication
+import service.Service
+import org.specs2.runner.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
 class ApplicationSpec extends Specification {
-
-  def requestJson(json: JsObject, path: String): Future[SimpleResult] = {
-    route(FakeRequest(POST, path).withJsonBody(json)).get
-  }
 
   "Service" should {
 
     "find users within region" in new WithApplication {
       val json = Json.obj("longitude" -> 54.2, "latitude" -> 5.2)
-      val search = requestJson(json, "/search")
-      status(search) must equalTo(OK)
-      contentType(search) must beSome("application/json")
-      val result = Json.parse(contentAsString(search))
-      (result \ "people").as[List[JsValue]].length must beEqualTo(4)
+      val response = Json.parse(searchRequest(json, OK))
+      (response \ "people").as[List[JsValue]].length must beEqualTo(4)
     }
 
     "find no users within region" in new WithApplication {
       val json = Json.obj("longitude" -> 24.4, "latitude" -> 3.2)
-      val search = requestJson(json, "/search")
-      status(search) must equalTo(OK)
-      contentType(search) must beSome("application/json")
-      val result = Json.parse(contentAsString(search))
-      (result \ "people").as[List[JsValue]].length must beEqualTo(0)
+      val response = Json.parse(searchRequest(json, OK))
+      (response \ "people").as[List[JsValue]].length must beEqualTo(0)
     }
     
-    "BadRequest on invalid JSON" in new WithApplication {
+    "send BadRequest on invalid JSON" in new WithApplication {
       val json = Json.obj("invalid" -> "request")
-      val search = requestJson(json, "/search")
-      status(search) must equalTo(BAD_REQUEST)
-      contentType(search) must beSome("application/json")
-      contentAsString(search) must contain("error.path.missing")
+      val response = searchRequest(json, BAD_REQUEST)
+      response must contain("error.path.missing")
     }
-    
-    "BadRequest on invalid data" in new WithApplication {
+
+    "send BadRequest on invalid datatype" in new WithApplication {
       val xml = <location><latitude>54.2</latitude><longitude>5.2</longitude></location>
       val search = route(FakeRequest(POST, "/search").withXmlBody(xml)).get
       status(search) must equalTo(BAD_REQUEST)
     }
-
+    
     "create a user" in new WithApplication {
       val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23)
-      val create = requestJson(json, "/create")
-      contentType(create) must beSome("application/json")
-      val result = Json.parse(contentAsString(create))
-      (result \ "status").as[String] must contain("OK")
+      val response = Json.parse(createRequest(json, OK))
+      (response \ "status").as[Int] must beEqualTo(OK)
+      val response2 = Json.parse(searchRequest(json, OK))
+      (response2 \ "people").as[List[JsValue]].length must beEqualTo(5)
     }
-    
-    "should find new user" in new WithApplication {
-      val json = Json.obj("longitude" -> 54.2, "latitude" -> 5.2)
-      val search = requestJson(json, "/search")
-      status(search) must equalTo(OK)
-      contentType(search) must beSome("application/json")
-      val result = Json.parse(contentAsString(search))
-      (result \ "people").as[List[JsValue]].length must beEqualTo(5)
-    }
-    
+
+
     "new users should get diffrent id" in new WithApplication {
       val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23)
-      val create1 = requestJson(json, "/create")
-      val create2 = requestJson(json, "/create")
-      println(contentAsString(create1))
-      println(contentAsString(create2))
-      contentType(create1) must beSome("application/json")
-      contentType(create2) must beSome("application/json")
-      val result1 = Json.parse(contentAsString(create1))
-      val result2 = Json.parse(contentAsString(create2))
-      
-      (result1 \ "status").as[String] must contain("OK")
-      (result2 \ "status").as[String] must contain("OK")
-      (result1 \ "id").as[Long] mustNotEqual((result2 \ "id").as[Long])
+      val response1 = Json.parse(createRequest(json, OK))
+      val response2 = Json.parse(createRequest(json, OK))
+      (response1 \ "id").as[String] mustNotEqual ((response2 \ "id").as[String])
     }
+
+    "new users should get diffrent id" in new WithApplication {
+      val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23)
+      val response1 = Json.parse(createRequest(json, OK))
+      val response2 = Json.parse(createRequest(json, OK))
+      (response1 \ "id").as[String] mustNotEqual ((response2 \ "id").as[String])
+    }
+
+    "a search request should not contain persons from other API clients" in new WithApplication {
+      val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23)
+      val response = Json.parse(searchRequest(json, OK))
+      (response \ "people").as[List[JsValue]].length must beEqualTo(0)
+    }
+  }
+
+  def application = new Application(new Service(DummyDatabase))
+
+  def searchRequest(json: JsObject, status: Int): String =
+    makeRequest(application.search, "/search", json, status)
+  def createRequest(json: JsObject, status: Int): String =
+    makeRequest(application.create, "/create", json, status)
+
+  def makeRequest(action: Action[AnyContent], path: String, json: JsObject, htmlStatus: Int): String = {
+    val result = action()(FakeRequest(POST, path)
+      .withHeaders(HeaderNames.CONTENT_TYPE -> "text/json")
+      .withJsonBody(json))
+    status(result) must equalTo(htmlStatus)
+    contentType(result) must beSome("application/json")
+    contentAsString(result)
   }
 }
