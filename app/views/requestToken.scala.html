@@ -1,0 +1,31 @@
+@(form: Form[String])
+@import helper.twitterBootstrap._
+<!DOCTYPE html>
+<html>
+    <head>
+        <title></title>
+        <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/main.css")">
+        <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/bootstrap.min.css")">
+        <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/bootstrap-theme.min.css")">
+        <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("images/favicon.png")">
+        <script src="@routes.Assets.at("javascripts/jquery-1.9.0.min.js")" type="text/javascript"></script>
+        <script src="@routes.Assets.at("javascripts/bootstrap.min.js")" type="text/javascript"></script>
+    </head>
+    <body>
+      <div class="container">
+        <div class="row">
+          <div class="main">
+              <h2>PeLoTi</h2>
+              <p>To be able to use the service you require a token.<br />
+              Fill in your email and thou shalt receive one magically!</p>
+              @helper.form(action = routes.Application.receive) {
+                <div class="form-group">
+                  @helper.inputText(form("email"))
+                </div>
+                <input type="submit" value="Request Token!" class="btn btn-primary" />
+              }
+          </div>
+        </div>  
+      </div>
+    </body>
+</html>

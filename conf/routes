@@ -2,6 +2,9 @@
 # This file defines all application routes (Higher priority routes first)
 # ~~~~
 
+GET     /request                    controllers.Application.request
+POST    /receive                    controllers.Application.receive
+
 POST    /search                     controllers.Application.search
 POST    /create                     controllers.Application.create
 
