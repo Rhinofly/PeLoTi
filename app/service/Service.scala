@@ -15,6 +15,10 @@ class Service(database: Database) {
     database.create(latitude, longitude, token)
   }
   
+  def updatePerson(id: String, latitude: Double, longitude: Double, token: String): String = {
+    database.update(id, latitude, longitude, token)
+  }
+  
   def generateToken(email: String): String = {
     Codecs.md5(email.getBytes)
   }

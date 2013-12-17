@@ -29,6 +29,7 @@ import play.api.test.Helpers._
 import play.api.test.Helpers.writeableOf_AnyContentAsXml
 import service.Service
 import org.specs2.runner.JUnitRunner
+import play.api.libs.ws.WS
 
 @RunWith(classOf[JUnitRunner])
 class ApplicationSpec extends Specification {
@@ -37,20 +38,20 @@ class ApplicationSpec extends Specification {
 
     "find users within region" in new WithApplication {
       val json = Json.obj("longitude" -> 54.2, "latitude" -> 5.2, "token" -> "string1")
-      val response = requestJsonSearch(json)
+      val response = Json.parse(searchRequest(json, OK))
       (response \ "people").as[List[JsValue]].length must beEqualTo(4)
     }
 
     "find no users within region" in new WithApplication {
       val json = Json.obj("longitude" -> 24.4, "latitude" -> 3.2, "token" -> "string1")
-      val response = requestJsonSearch(json)
+      val response = Json.parse(searchRequest(json, OK))
       (response \ "people").as[List[JsValue]].length must beEqualTo(0)
     }
-    
+
     "send BadRequest on invalid JSON" in new WithApplication {
       val json = Json.obj("invalid" -> "request")
-      val response = failingSearchRequest(json)
-      contentAsString(response) must contain("error.path.missing")
+      val response = searchRequest(json, BAD_REQUEST)
+      response must contain("error.path.missing")
     }
 
     "send BadRequest on invalid datatype" in new WithApplication {
@@ -60,23 +61,23 @@ class ApplicationSpec extends Specification {
     }
     
     "create a user" in new WithApplication {
-      val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23)
-      val response = requestJsonCreate(json)
-      (response \ "status").as[Int] must beEqualTo(OK)
-      val response2 = requestJsonSearch(json)
+      val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23, "token" -> "string1")
+      val response = Json.parse(createRequest(json, OK))
+      (response \ "status").as[String] must contain("OK")
+      val response2 = Json.parse(searchRequest(json, OK))
       (response2 \ "people").as[List[JsValue]].length must beEqualTo(5)
     }
 
     "new users should get diffrent id" in new WithApplication {
-      val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23)
-      val response1 = requestJsonCreate(json)
-      val response2 = requestJsonCreate(json)
+      val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23, "token" -> "string1")
+      val response1 = Json.parse(createRequest(json, OK))
+      val response2 = Json.parse(createRequest(json, OK))
       (response1 \ "id").as[String] mustNotEqual ((response2 \ "id").as[String])
     }
     
-    "a search request should not contain persons from other clients" in new WithApplication {
+    "a search request should not contain persons from other API clients" in new WithApplication {
       val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23, "token" -> "token")
-      val response = requestJsonSearch(json)
+      val response = Json.parse(searchRequest(json, OK))
       (response \ "people").as[List[JsValue]].length must beEqualTo(0)
     }
     
@@ -91,36 +92,45 @@ class ApplicationSpec extends Specification {
       status(response) must equalTo(BAD_REQUEST)
       contentAsString(response) must contain("Email is required!")
     }
+    
+    "update a existing user" in new WithApplication {
+      val json = Json.obj("id" -> "1", "longitude" -> 51.04, "latitude" -> 4.21, "token" -> "string1")
+      val response = updateRequest(json, OK)
+      val jsonResponse = Json.parse(response)
+      (jsonResponse \ "status").as[String] must beEqualTo("OK")
+      val json2 = Json.obj("longitude" -> 54.2, "latitude" -> 5.2, "token" -> "string1")
+      val response2 = Json.parse(searchRequest(json2, OK))
+      (response2 \ "people").as[List[JsValue]].length must beEqualTo(3)
+      
+    }
+    
+    "update a user with invalid data" in new WithApplication {
+      val json = Json.obj("id" -> "1337", "longitude" -> 51.04, "latitude" -> 4.21, "token" -> "string1")
+      val response = updateRequest(json, OK)
+      val jsonResponse = Json.parse(response)
+      (jsonResponse \ "status").as[String] must beEqualTo("Invalid request")
+    }
   }
   
   def application = new Application(new Service(DummyDatabase)) 
   
-  def requestJsonSearch(json: JsObject): JsValue = successRequest(application.search, "/search", json)
-  def requestJsonCreate(json: JsObject): JsValue = successRequest(application.create, "/create", json)
+  def searchRequest(json: JsObject, status: Int): String = 
+    makeRequest(application.search, "/search", json, status)
+  def createRequest(json: JsObject, status: Int): String = 
+    makeRequest(application.create, "/create", json, status)
+  def updateRequest(json: JsObject, status: Int): String =
+    makeRequest(application.update, "/update", json, status)
   
-  def failingSearchRequest(json: JsObject): Future[SimpleResult] = 
-    failingRequest(application.search, "/search", json)
-  
-  def successRequest(action: Action[AnyContent], path: String, json: JsObject): JsValue = {
+  def makeRequest(action: Action[AnyContent], path: String, json: JsObject, htmlStatus: Int): String = {
     val result = action()(FakeRequest(POST, path)
       .withHeaders(HeaderNames.CONTENT_TYPE -> "text/json")
       .withJsonBody(json))
-    status(result) must equalTo(OK)
+    status(result) must equalTo(htmlStatus)
     contentType(result) must beSome("application/json")
-    Json.parse(contentAsString(result))
-  }
-  
-  def failingRequest(action: Action[AnyContent], path: String, json: JsObject): Future[SimpleResult] = {
-    val result = action()(FakeRequest(POST, path)
-      .withHeaders(HeaderNames.CONTENT_TYPE -> "text/json")
-      .withJsonBody(json))
-    status(result) must equalTo(BAD_REQUEST)
-    contentType(result) must beSome("application/json")
-    result
+    contentAsString(result)
   }
   
   def tokenRequest(data: (String, String)): Future[SimpleResult] = {
-    application.receive(FakeRequest(POST, "/receive")
-        .withFormUrlEncodedBody(data))
+    application.receive(FakeRequest(POST, "/receive").withFormUrlEncodedBody(data))
   }
 }

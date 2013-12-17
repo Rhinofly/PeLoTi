@@ -11,3 +11,5 @@ libraryDependencies ++= Seq(
 )     
 
 playScalaSettings
+
+scalacOptions += "-feature"

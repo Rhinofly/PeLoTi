@@ -25,7 +25,12 @@ class Application(service: Service) extends Controller {
     (__ \ 'longitude).read[Double] and
     (__ \ 'token).read[String]) tupled
   
-  
+  implicit val updatedReads = (
+    (__ \ 'id).read[String] and
+    (__ \ 'latitude).read[Double] and
+    (__ \ 'longitude).read[Double] and
+    (__ \ 'token).read[String]) tupled
+    
   def search = Action { request =>
    parseJson(request, (latitude: Double, longitude: Double, token: String) =>
       Json.obj("status" -> "OK", "people" -> service.searchPeople(latitude, longitude, token)
@@ -37,6 +42,17 @@ class Application(service: Service) extends Controller {
       Json.obj("status" -> "OK", "id" -> service.createPerson(latitude, longitude, token)
     )
   )}
+  
+  def update = Action { request =>
+   request.body.asJson.map(json => {
+     json.validate[(String, Double, Double, String)].map {
+       case(id, latitude, longitude, token) =>
+         Ok(Json.obj("status" -> service.updatePerson(id, latitude, longitude, token)))
+     }.recoverTotal {
+        e => BadRequest(JsError.toFlatJson(e))
+     }
+   }).getOrElse(BadRequest("Invalid JSON"))
+  }
 
   val requestForm = Form(
     "email" -> email)
