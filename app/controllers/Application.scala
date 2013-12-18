@@ -1,57 +1,27 @@
 package controllers
 
 import models.MongoDB
-import play.api.libs.functional.syntax.functionalCanBuildApplicative
-import play.api.libs.functional.syntax.toFunctionalBuilderOps
-import play.api.libs.json.JsError
-import play.api.libs.json.Json
-import scala.annotation.implicitNotFound
-import play.api.libs.functional.syntax._
+import play.api.data.Form
+import play.api.data.Forms.email
 import play.api.libs.json._
-import play.api.libs.json.Json.toJsFieldJsValueWrapper
-import play.api.libs.json.__
 import play.api.mvc._
-import play.api.data._
-import play.api.data.Forms._
-import play.api.data.format.Formats._
-
-import models._
-import service._
+import service.Service
 
 class Application(service: Service) extends Controller {
-
-  implicit val reads = (
-    (__ \ 'latitude).read[Double] and
-    (__ \ 'longitude).read[Double] and
-    (__ \ 'token).read[String]) tupled
-  
-  implicit val updatedReads = (
-    (__ \ 'id).read[String] and
-    (__ \ 'latitude).read[Double] and
-    (__ \ 'longitude).read[Double] and
-    (__ \ 'token).read[String]) tupled
     
   def search = Action { request =>
-   parseJson(request, (latitude: Double, longitude: Double, token: String) =>
-      Json.obj("status" -> "OK", "people" -> service.searchPeople(latitude, longitude, token)
-    )
-  )}
+    val action = (service.searchPeople _)
+    parseJson(request, action)
+  }
 
   def create = Action { request =>
-    parseJson(request, (latitude: Double, longitude: Double, token: String) =>
-      Json.obj("status" -> "OK", "id" -> service.createPerson(latitude, longitude, token)
-    )
-  )}
-  
+    val action = (service.createPerson _)
+    parseJson(request, action)
+  }
+
   def update = Action { request =>
-   request.body.asJson.map(json => {
-     json.validate[(String, Double, Double, String)].map {
-       case(id, latitude, longitude, token) =>
-         Ok(Json.obj("status" -> service.updatePerson(id, latitude, longitude, token)))
-     }.recoverTotal {
-        e => BadRequest(JsError.toFlatJson(e))
-     }
-   }).getOrElse(BadRequest("Invalid JSON"))
+    val action = (service.updatePerson _)
+    parseJson(request, action)
   }
 
   val requestForm = Form(
@@ -63,21 +33,19 @@ class Application(service: Service) extends Controller {
 
   def receive = Action { implicit request =>
     requestForm.bindFromRequest.fold(
-        formWithErrors => BadRequest("Email is required!"),
-        value => Ok(views.html.receiveToken(service.generateToken(value)))
-    )
+      formWithErrors => Ok(views.html.requestToken(formWithErrors)),
+      value => Ok(views.html.receiveToken(service.generateToken(value))))
   }
-  
-  def parseJson(request: Request[AnyContent], matcher: (Double, Double, String) => JsValue): SimpleResult = {
+
+  def parseJson[T](request: Request[AnyContent], action: T => JsValue)(implicit reads: Reads[T]): SimpleResult = {
     request.body.asJson.map(json => {
-      json.validate[(Double, Double, String)].map {
-        case (latitude, longitude, token) =>
-          Ok(matcher(latitude, longitude, token))
+      json.validate(reads).map { result =>
+        Ok(action(result))
       }.recoverTotal {
-        e => BadRequest(JsError.toFlatJson(e))
+        e => BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> JsError.toFlatJson(e)))
       }
-    }).getOrElse(BadRequest("Invalid JSON"))
+    }).getOrElse(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid JSON")))
   }
 }
 
-object Application extends Application(new Service(MongoDB))
+object Application extends Application(Service(MongoDB))

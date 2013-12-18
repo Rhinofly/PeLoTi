@@ -4,32 +4,11 @@ import org.specs2.mutable.Specification
 import controllers.Application
 import play.api.http.HeaderNames
 import play.api.libs.json._
-import play.api.mvc.SimpleResult
+import play.api.mvc._
 import play.api.test._
 import play.api.test.Helpers._
-import play.api.libs.json.Json
-import controllers.Application
-import service.Service
-import play.api.mvc.Action
-import play.api.http.HeaderNames
-import play.api.mvc.AnyContent
-import controllers.Application
-import service.Service
-import play.api.mvc.Action
-import play.api.mvc.AnyContent
-import play.api.test.FakeRequest
-import play.api.test.Helpers._
-import play.api.test.WithApplication
-import play.api.libs.json.Json.toJsFieldJsValueWrapper
-import play.api.mvc.Action
-import play.api.mvc.AnyContent
-import play.api.mvc.SimpleResult
-import play.api.test._
-import play.api.test.Helpers._
-import play.api.test.Helpers.writeableOf_AnyContentAsXml
 import service.Service
 import org.specs2.runner.JUnitRunner
-import play.api.libs.ws.WS
 
 @RunWith(classOf[JUnitRunner])
 class ApplicationSpec extends Specification {
@@ -63,7 +42,7 @@ class ApplicationSpec extends Specification {
     "create a user" in new WithApplication {
       val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23, "token" -> "string1")
       val response = Json.parse(createRequest(json, OK))
-      (response \ "status").as[String] must contain("OK")
+      (response \ "status").as[Int] must beEqualTo(OK)
       val response2 = Json.parse(searchRequest(json, OK))
       (response2 \ "people").as[List[JsValue]].length must beEqualTo(5)
     }
@@ -82,22 +61,23 @@ class ApplicationSpec extends Specification {
     }
     
     "request token" in new WithApplication {
+      val token = service.generateToken("test@example.com")
       val response = tokenRequest(("email", "test@example.com"))
       status(response) must equalTo(OK)
-      contentAsString(response) must contain("""<label id="token">""")
+      contentAsString(response) must contain(s"""<label id="token">$token</label>""")
     }
     
     "request token with invalid email" in new WithApplication {
       val response = tokenRequest(("email", "test"))
-      status(response) must equalTo(BAD_REQUEST)
-      contentAsString(response) must contain("Email is required!")
+      status(response) must equalTo(OK)
+      contentAsString(response) must contain("Valid email required")
     }
     
     "update a existing user" in new WithApplication {
       val json = Json.obj("id" -> "1", "longitude" -> 51.04, "latitude" -> 4.21, "token" -> "string1")
       val response = updateRequest(json, OK)
       val jsonResponse = Json.parse(response)
-      (jsonResponse \ "status").as[String] must beEqualTo("OK")
+      (jsonResponse \ "status").as[Int] must beEqualTo(OK)
       val json2 = Json.obj("longitude" -> 54.2, "latitude" -> 5.2, "token" -> "string1")
       val response2 = Json.parse(searchRequest(json2, OK))
       (response2 \ "people").as[List[JsValue]].length must beEqualTo(3)
@@ -108,11 +88,12 @@ class ApplicationSpec extends Specification {
       val json = Json.obj("id" -> "1337", "longitude" -> 51.04, "latitude" -> 4.21, "token" -> "string1")
       val response = updateRequest(json, OK)
       val jsonResponse = Json.parse(response)
-      (jsonResponse \ "status").as[String] must beEqualTo("Invalid request")
+      (jsonResponse \ "status").as[Int] must beEqualTo(BAD_REQUEST)
     }
   }
   
-  def application = new Application(new Service(DummyDatabase)) 
+  def service = Service(DummyDatabase)
+  def application = new Application(service) 
   
   def searchRequest(json: JsObject, status: Int): String = 
     makeRequest(application.search, "/search", json, status)

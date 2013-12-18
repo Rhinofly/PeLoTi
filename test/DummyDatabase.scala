@@ -6,6 +6,7 @@ import play.api.db.DB
 import anorm._
 import anorm.SqlParser._
 import scala.language.postfixOps
+import play.api.http.Status._
 
 object DummyDatabase extends Database {
 
@@ -54,15 +55,15 @@ object DummyDatabase extends Database {
   }
   
   
-  def update(id: String, latitude: Double, longitude: Double, token: String): String = {
+  def update(id: String, latitude: Double, longitude: Double, token: String): Int = {
     DB.withConnection { implicit connection =>
       val count = SQL("update person set latitude={latitude}, longitude={longitude} where id = {id} and token = {token}").on(
           'latitude -> latitude,
           'longitude -> longitude,
           'id -> id.toLong,
           'token -> token).executeUpdate()
-      if(count != 1) "Invalid request"
-      else "OK"
+      if(count != 1) BAD_REQUEST
+      else OK
     }
   }
 }
