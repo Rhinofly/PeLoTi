@@ -18,7 +18,7 @@
               <h2>PeLoTi</h2>
               <p>To be able to use the service you require a token.<br />
               Fill in your email and thou shalt receive one magically!</p>
-              @helper.form(action = routes.Application.receive) {
+              @helper.form(action = routes.Portal.receive) {
                 <div class="form-group">
                   @helper.inputText(form("email"), args = 'placeholder -> "Email", '_label -> "Email", '_showConstraints -> false)
                 </div>

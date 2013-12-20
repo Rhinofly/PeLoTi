@@ -9,6 +9,7 @@ import play.api.test._
 import play.api.test.Helpers._
 import service.Service
 import org.specs2.runner.JUnitRunner
+import controllers.Portal
 
 @RunWith(classOf[JUnitRunner])
 class ApplicationSpec extends Specification {
@@ -60,19 +61,6 @@ class ApplicationSpec extends Specification {
       (response \ "people").as[List[JsValue]].length must beEqualTo(0)
     }
     
-    "request token" in new WithApplication {
-      val token = service.generateToken("test@example.com")
-      val response = tokenRequest(("email", "test@example.com"))
-      status(response) must equalTo(OK)
-      contentAsString(response) must contain(s"""<label id="token">$token</label>""")
-    }
-    
-    "request token with invalid email" in new WithApplication {
-      val response = tokenRequest(("email", "test"))
-      status(response) must equalTo(OK)
-      contentAsString(response) must contain("Valid email required")
-    }
-    
     "update a existing user" in new WithApplication {
       val json = Json.obj("id" -> "1", "longitude" -> 51.04, "latitude" -> 4.21, "token" -> "string1")
       val response = updateRequest(json, OK)
@@ -90,17 +78,28 @@ class ApplicationSpec extends Specification {
       val jsonResponse = Json.parse(response)
       (jsonResponse \ "status").as[Int] must beEqualTo(BAD_REQUEST)
     }
+    
+    "get user by id" in new WithApplication {
+      val json = Json.obj("id" -> "1", "token" -> "string1")
+      val jsonResponse = Json.parse(getRequest(json, OK))
+      (jsonResponse \ "latitude").as[Double] must beEqualTo(5.22)
+      (jsonResponse \ "longitude").as[Double] must beEqualTo(54.21)
+    }
+    
+    "get user by invalid id" in new WithApplication {
+      val json = Json.obj("id" -> "1337", "token" -> "string1")
+      val jsonResponse = Json.parse(getRequest(json, OK))
+      (jsonResponse \ "status").as[Int] must beEqualTo(BAD_REQUEST)
+    }
   }
   
   def service = Service(DummyDatabase)
   def application = new Application(service) 
   
-  def searchRequest(json: JsObject, status: Int): String = 
-    makeRequest(application.search, "/search", json, status)
-  def createRequest(json: JsObject, status: Int): String = 
-    makeRequest(application.create, "/create", json, status)
-  def updateRequest(json: JsObject, status: Int): String =
-    makeRequest(application.update, "/update", json, status)
+  def searchRequest(json: JsObject, status: Int): String = makeRequest(application.search, "/search", json, status)
+  def createRequest(json: JsObject, status: Int): String = makeRequest(application.create, "/create", json, status)
+  def updateRequest(json: JsObject, status: Int): String = makeRequest(application.update, "/update", json, status)
+  def getRequest(json: JsObject, status: Int): String = makeRequest(application.get, "/get", json, status)
   
   def makeRequest(action: Action[AnyContent], path: String, json: JsObject, htmlStatus: Int): String = {
     val result = action()(FakeRequest(POST, path)
@@ -109,9 +108,5 @@ class ApplicationSpec extends Specification {
     status(result) must equalTo(htmlStatus)
     contentType(result) must beSome("application/json")
     contentAsString(result)
-  }
-  
-  def tokenRequest(data: (String, String)): Future[SimpleResult] = {
-    application.receive(FakeRequest(POST, "/receive").withFormUrlEncodedBody(data))
   }
 }

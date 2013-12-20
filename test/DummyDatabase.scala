@@ -54,7 +54,6 @@ object DummyDatabase extends Database {
     }
   }
   
-  
   def update(id: String, latitude: Double, longitude: Double, token: String): Int = {
     DB.withConnection { implicit connection =>
       val count = SQL("update person set latitude={latitude}, longitude={longitude} where id = {id} and token = {token}").on(
@@ -64,6 +63,25 @@ object DummyDatabase extends Database {
           'token -> token).executeUpdate()
       if(count != 1) BAD_REQUEST
       else OK
+    }
+  }
+  
+  @throws(classOf[IndexOutOfBoundsException])
+  override def getPerson(id: String, token: String): Person = {
+    DB.withConnection { implicit connection =>
+      val result = SQL("""select * from person where id = {id} and token = {token}""").on(
+          'id -> id,
+          'token -> token
+      ).as{
+        get[Long]("person.id") ~
+        get[Double]("person.latitude") ~
+        get[Double]("person.longitude") ~
+        get[String]("person.token") map { 
+          case id ~ latitude ~ longitude ~ token => 
+            Person(String.valueOf(id), List(latitude, longitude), token)
+        } *
+      }
+      result(0)
     }
   }
 }

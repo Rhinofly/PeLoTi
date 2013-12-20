@@ -1,14 +1,13 @@
 package controllers
 
 import models.MongoDB
-import play.api.data.Form
-import play.api.data.Forms.email
+import models.requests.RequestHandler._
 import play.api.libs.json._
 import play.api.mvc._
 import service.Service
 
 class Application(service: Service) extends Controller {
-    
+
   def search = Action { request =>
     val action = (service.searchPeople _)
     parseJson(request, action)
@@ -23,18 +22,10 @@ class Application(service: Service) extends Controller {
     val action = (service.updatePerson _)
     parseJson(request, action)
   }
-
-  val requestForm = Form(
-    "email" -> email)
-
-  def request = Action {
-    Ok(views.html.requestToken(requestForm))
-  }
-
-  def receive = Action { implicit request =>
-    requestForm.bindFromRequest.fold(
-      formWithErrors => Ok(views.html.requestToken(formWithErrors)),
-      value => Ok(views.html.receiveToken(service.generateToken(value))))
+  
+  def get = Action { request =>
+    val action = (service.getPerson _)
+    parseJson(request, action)
   }
 
   def parseJson[T](request: Request[AnyContent], action: T => JsValue)(implicit reads: Reads[T]): SimpleResult = {
