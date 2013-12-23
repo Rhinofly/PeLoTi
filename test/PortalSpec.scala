@@ -7,11 +7,9 @@ import play.api.mvc._
 import play.api.test._
 import play.api.test.Helpers._
 import service.Service
-import org.specs2.runner.JUnitRunner
 import controllers.Portal
+import service.PortalService
 
-
-@RunWith(classOf[JUnitRunner])
 class PortalSpec extends Specification {
   "Portal" should {
     "request token" in new WithApplication {
@@ -28,10 +26,10 @@ class PortalSpec extends Specification {
     }
   }
   
-  def service = Service(DummyDatabase)
+  def service = PortalService.apply
   def portal = new Portal(service)
   
   def tokenRequest(data: (String, String)): Future[SimpleResult] = {
-    portal.receive(FakeRequest(POST, "/receive").withFormUrlEncodedBody(data))
+    portal.requestTokenHandler(FakeRequest(POST, "/receive").withFormUrlEncodedBody(data))
   }
 }

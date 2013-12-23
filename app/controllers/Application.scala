@@ -1,42 +1,55 @@
 package controllers
 
-import models.MongoDB
-import models.requests.RequestHandler._
-import play.api.libs.json._
-import play.api.mvc._
+import scala.concurrent.Future
+import models._
+import models.requests._
+import play.api.libs.json.JsError
+import play.api.libs.json.JsObject
+import play.api.libs.json.Json
+import play.api.libs.json.Json.toJsFieldJsValueWrapper
+import play.api.libs.json.Reads
+import play.api.mvc.Action
+import play.api.mvc.AnyContent
+import play.api.mvc.Controller
 import service.Service
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import play.api.libs.concurrent.Execution.Implicits._
+import scala.util._
+import play.api.data._
+import play.api.data.Form._
+import play.api.data.Forms._
+import play.api.data.format.Formats._
 
 class Application(service: Service) extends Controller {
 
-  def search = Action { request =>
-    val action = (service.searchPeople _)
-    parseJson(request, action)
+  def byLocation(longitude: Option[Double], latitude: Option[Double]) = Action.async {
+    if (latitude.isDefined && longitude.isDefined)
+      service.getByLocation(longitude.get, latitude.get).map(list => Ok(list))
+    else
+      Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
   }
 
-  def create = Action { request =>
-    val action = (service.createPerson _)
-    parseJson(request, action)
+  def save = Action.async { implicit request =>
+    saveForm.bindFromRequest.fold(
+      formWithErrors => { Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters"))) },
+      data => {
+        service.savePerson(data).map(json => Ok(json))
+      })
   }
 
-  def update = Action { request =>
-    val action = (service.updatePerson _)
-    parseJson(request, action)
-  }
-  
-  def get = Action { request =>
-    val action = (service.getPerson _)
-    parseJson(request, action)
+  def byId(id: Option[String]) = Action.async {
+    if (id.isDefined)
+      service.getById(id.get).map(person => Ok(person))
+    else
+      Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
   }
 
-  def parseJson[T](request: Request[AnyContent], action: T => JsValue)(implicit reads: Reads[T]): SimpleResult = {
-    request.body.asJson.map(json => {
-      json.validate(reads).map { result =>
-        Ok(action(result))
-      }.recoverTotal {
-        e => BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> JsError.toFlatJson(e)))
-      }
-    }).getOrElse(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid JSON")))
-  }
+  def saveForm = Form(
+    mapping(
+      "longitude" -> of[Double],
+      "latitude" -> of[Double],
+      "id" -> optional(text))(UpdateRequest.apply)(UpdateRequest.unapply))
 }
 
-object Application extends Application(Service(MongoDB))
+object Application extends Application(Service(new MongoDB(Config.databaseName, "test")))

@@ -1,112 +1,115 @@
+import scala.annotation.implicitNotFound
+import scala.collection.mutable.ListBuffer
+import scala.concurrent.Await
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import org.junit.runner.RunWith
-import org.specs2.mutable.Specification
-import controllers.Application
-import play.api.http.HeaderNames
-import play.api.libs.json._
-import play.api.mvc._
-import play.api.test._
-import play.api.test.Helpers._
-import service.Service
-import org.specs2.runner.JUnitRunner
-import controllers.Portal
+import scala.concurrent.duration.DurationInt
 
-@RunWith(classOf[JUnitRunner])
-class ApplicationSpec extends Specification {
+import org.specs2.mutable.Specification
+import org.specs2.time.NoTimeConversions
+
+import com.mongodb.casbah.Imports.MongoDBObject
+
+import controllers.Application
+import models.Config
+import models.MongoDB
+import play.api.libs.json.JsValue
+import play.api.libs.ws.Response
+import play.api.libs.ws.WS
+import play.api.test.Helpers.BAD_REQUEST
+import play.api.test.Helpers.OK
+import play.api.test.WithServer
+import service.Service
+
+class ApplicationSpec extends Specification with NoTimeConversions {
 
   "Service" should {
 
-    "find users within region" in new WithApplication {
-      val json = Json.obj("longitude" -> 54.2, "latitude" -> 5.2, "token" -> "string1")
-      val response = Json.parse(searchRequest(json, OK))
+    "find users within region" in new WithServer {
+      val response = getByLocation(port, 54.2, 5.2)
       (response \ "people").as[List[JsValue]].length must beEqualTo(4)
     }
 
-    "find no users within region" in new WithApplication {
-      val json = Json.obj("longitude" -> 24.4, "latitude" -> 3.2, "token" -> "string1")
-      val response = Json.parse(searchRequest(json, OK))
+    "find no users within region" in new WithServer {
+      val response = getByLocation(port, 24.4, 3.2)
       (response \ "people").as[List[JsValue]].length must beEqualTo(0)
     }
 
-    "send BadRequest on invalid JSON" in new WithApplication {
-      val json = Json.obj("invalid" -> "request")
-      val response = searchRequest(json, BAD_REQUEST)
-      response must contain("error.path.missing")
+    "send BadRequest on missing parameters" in new WithServer {
+      val response = getRequest(port, "getByLocation", BAD_REQUEST, ("latitude" -> "5.2"))
+      (response \ "message").as[String] must contain("Invalid parameters")
     }
 
-    "send BadRequest on invalid datatype" in new WithApplication {
-      val xml = <location><latitude>54.2</latitude><longitude>5.2</longitude></location>
-      val search = route(FakeRequest(POST, "/search").withXmlBody(xml)).get
-      status(search) must equalTo(BAD_REQUEST)
-    }
-    
-    "create a user" in new WithApplication {
-      val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23, "token" -> "string1")
-      val response = Json.parse(createRequest(json, OK))
+    "create a user" in new WithServer {
+      val body = Map("longitude" -> Seq("54.24"), "latitude" -> Seq("5.23"), "token" -> Seq("string1"))
+      val response = saveRequest(port, body, OK)
       (response \ "status").as[Int] must beEqualTo(OK)
-      val response2 = Json.parse(searchRequest(json, OK))
+      val response2 = getByLocation(port, 54.2, 5.2)
       (response2 \ "people").as[List[JsValue]].length must beEqualTo(5)
     }
 
-    "new users should get diffrent id" in new WithApplication {
-      val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23, "token" -> "string1")
-      val response1 = Json.parse(createRequest(json, OK))
-      val response2 = Json.parse(createRequest(json, OK))
-      (response1 \ "id").as[String] mustNotEqual ((response2 \ "id").as[String])
+    "new users should get diffrent id" in new WithServer {
+      val body = Map("longitude" -> Seq("54.24"), "latitude" -> Seq("5.23"), "token" -> Seq("string1"))
+      def response = saveRequest(port, body, OK)
+      (response \ "id").as[String] mustNotEqual ((response \ "id").as[String])
     }
-    
-    "a search request should not contain persons from other API clients" in new WithApplication {
-      val json = Json.obj("longitude" -> 54.24, "latitude" -> 5.23, "token" -> "token")
-      val response = Json.parse(searchRequest(json, OK))
-      (response \ "people").as[List[JsValue]].length must beEqualTo(0)
-    }
-    
-    "update a existing user" in new WithApplication {
-      val json = Json.obj("id" -> "1", "longitude" -> 51.04, "latitude" -> 4.21, "token" -> "string1")
-      val response = updateRequest(json, OK)
-      val jsonResponse = Json.parse(response)
-      (jsonResponse \ "status").as[Int] must beEqualTo(OK)
-      val json2 = Json.obj("longitude" -> 54.2, "latitude" -> 5.2, "token" -> "string1")
-      val response2 = Json.parse(searchRequest(json2, OK))
+
+    "update a existing user" in new WithServer {
+      val body = Map("id" -> Seq(idList(0)), "longitude" -> Seq("51.04"), "latitude" -> Seq("5.21"))
+      val response = saveRequest(port, body, OK)
+      (response \ "status").as[Int] must beEqualTo(OK)
+      val response2 = getByLocation(port, 54.2, 5.2)
       (response2 \ "people").as[List[JsValue]].length must beEqualTo(3)
-      
     }
-    
-    "update a user with invalid data" in new WithApplication {
-      val json = Json.obj("id" -> "1337", "longitude" -> 51.04, "latitude" -> 4.21, "token" -> "string1")
-      val response = updateRequest(json, OK)
-      val jsonResponse = Json.parse(response)
-      (jsonResponse \ "status").as[Int] must beEqualTo(BAD_REQUEST)
+
+    "update a user with invalid data" in new WithServer {
+      val body = Map("id" -> Seq(idList(0)))
+      val response = saveRequest(port, body, BAD_REQUEST)
     }
-    
-    "get user by id" in new WithApplication {
-      val json = Json.obj("id" -> "1", "token" -> "string1")
-      val jsonResponse = Json.parse(getRequest(json, OK))
-      (jsonResponse \ "latitude").as[Double] must beEqualTo(5.22)
-      (jsonResponse \ "longitude").as[Double] must beEqualTo(54.21)
+
+    "get user by id" in new WithServer {
+      val response = getById(port, idList(0))
+      (response \ "location" \ "longitude").as[Double] must beEqualTo(51.04)
+      (response \ "location" \ "latitude").as[Double] must beEqualTo(4.21)
     }
-    
-    "get user by invalid id" in new WithApplication {
-      val json = Json.obj("id" -> "1337", "token" -> "string1")
-      val jsonResponse = Json.parse(getRequest(json, OK))
-      (jsonResponse \ "status").as[Int] must beEqualTo(BAD_REQUEST)
+
+    "get user by invalid id" in new WithServer {
+      val response = getById(port, "test", BAD_REQUEST)
     }
   }
+
+  def database = new MongoDB(Config.databaseName, "test")
+  def service = Service(database)
+  def application = new Application(service)
   
-  def service = Service(DummyDatabase)
-  def application = new Application(service) 
+  lazy val idList = before
   
-  def searchRequest(json: JsObject, status: Int): String = makeRequest(application.search, "/search", json, status)
-  def createRequest(json: JsObject, status: Int): String = makeRequest(application.create, "/create", json, status)
-  def updateRequest(json: JsObject, status: Int): String = makeRequest(application.update, "/update", json, status)
-  def getRequest(json: JsObject, status: Int): String = makeRequest(application.get, "/get", json, status)
+  def before: IndexedSeq[String] = {
+    for(i <- 0 to 4) yield Await.result(database.save(54.2, 5.2, None), 5 seconds)
+  }
   
-  def makeRequest(action: Action[AnyContent], path: String, json: JsObject, htmlStatus: Int): String = {
-    val result = action()(FakeRequest(POST, path)
-      .withHeaders(HeaderNames.CONTENT_TYPE -> "text/json")
-      .withJsonBody(json))
-    status(result) must equalTo(htmlStatus)
-    contentType(result) must beSome("application/json")
-    contentAsString(result)
+  def after {
+    database.mongoCollection.remove(MongoDBObject("latitude" -> 54.24))
+  }
+
+  def getByLocation(port: Int, latitude: Double, longitude: Double, status: Int = OK): JsValue =
+    getRequest(port, "getByLocation", status, "longitude" -> String.valueOf(longitude), "latitude" -> String.valueOf(latitude))
+  def saveRequest(port: Int, body: Map[String, Seq[String]], status: Int = OK): JsValue = postRequest(port, "save", status, body)
+  def getById(port: Int, id: String, status: Int = OK): JsValue = getRequest(port, "getById", status, "id" -> id)
+
+  def postRequest(port: Int, url: String, status: Int, body: Map[String, Seq[String]]): JsValue = {
+    val reponse = WS.url(s"http://localhost:$port/$url").post(body)
+    parseResponse(reponse, status)
+  }
+
+  def getRequest(port: Int, url: String, status: Int, parameters: (String, String)*): JsValue = {
+    val request = WS.url(s"http://localhost:$port/$url").withQueryString(parameters:_*)
+    parseResponse(request.get, status)
+  }
+
+  def parseResponse(future: Future[Response], status: Int): JsValue = {
+    val response = Await.result(future, 10.seconds)
+    (response.json \ "status").as[Int] must beEqualTo(status)
+    response.json
   }
 }

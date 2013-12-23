@@ -2,25 +2,12 @@
 
 <!DOCTYPE html>
 
-<html>
-    <head>
-        <title></title>
-        <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/main.css")">
-        <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/bootstrap.min.css")">
-        <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/bootstrap-theme.min.css")">
-        <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("images/favicon.png")">
-        <script src="@routes.Assets.at("javascripts/jquery-1.9.0.min.js")" type="text/javascript"></script>
-        <script src="@routes.Assets.at("javascripts/bootstrap.min.js")" type="text/javascript"></script>
-    </head>
-    <body>
-      <div class="container">
-        <div class="row">
-          <div class="main">
-              <h2>PeLoTi</h2>
-              <label>Token:</label>
-              <label id="token">@token</label>
-          </div>
-        </div>  
-      </div>
-    </body>
-</html>
+@main("Thou has received a token") {
+  <div class="row">
+    <div class="main">
+      <h2>PeLoTi</h2>
+      <label>Token:</label>
+      <label id="token">@token</label>
+    </div>
+  </div>  
+}

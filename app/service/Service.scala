@@ -1,47 +1,41 @@
 package service
 
-import models.Person
-import models.Database
+import models._
 import play.api.libs.Codecs
 import scala.collection.immutable.StringOps
 import play.api.libs.json._
-import models.requests.RequestHandler
+import models.requests._
 import play.api.http.Status._
 import models.requests._
+import scala.concurrent.Future
+import play.api.libs.concurrent.Execution.Implicits._
+import scala.util._
 
-class Service(database: Database) {
+class Service(repository: PersonRepository) {
   
-  def searchPeople(request: MainRequest): JsObject = {
-    val result = database.search(request.latitude, request.longitude, 10, request.token)
-    Json.obj("status" -> OK, "people" -> result)
-  }
-  
-  def createPerson(request: MainRequest): JsObject = {
-    val id = database.create(request.latitude, request.longitude, request.token)
-    Json.obj("status" -> OK, "id" -> id)
-  }
-  
-  def updatePerson(request: UpdateRequest): JsObject = {
-    val status = database.update(request.id, request.latitude, request.longitude, request.token)
-    Json.obj("status" -> status)
-  }
-  
-  def getPerson(request: GetRequest): JsObject = {
-    try {
-      val person = database.getPerson(request.id, request.token)
-      Json.obj("status" -> OK, "latitude" -> person.location(0), "longitude" -> person.location(1))
-    } catch {
-      case e: Exception => Json.obj("status" -> BAD_REQUEST, "message" -> e.getMessage) 
+  def getByLocation(longitude: Double, latitude: Double): Future[JsObject] = {
+    repository.getByLocation(longitude, latitude, 10).map {
+      list => Json.obj("status" -> OK, "people" -> list)
     }
   }
   
-  def generateToken(email: String): String = {
-    Codecs.md5(email.getBytes)
+  def savePerson(request: UpdateRequest): Future[JsObject] = {
+    repository.save(request.latitude, request.longitude, request.id).map(id => 
+      Json.obj("status" -> OK, "id" -> id))
   }
+  
+  def getById(id: String): Future[JsObject] = {
+    try {
+      repository.getById(id).map(person => 
+        Json.obj("status" -> OK, "location" -> person.location))
+    } catch {
+      case e: Exception => Future(Json.obj("status" -> BAD_REQUEST, "message" -> e.getMessage))
+    }
+  }  
 }
 
 object Service {
-  def apply(database: Database): Service = {
-    new Service(database)
+  def apply(repository: PersonRepository): Service = {
+    new Service(repository)
   }
 }
