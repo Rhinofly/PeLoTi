@@ -4,12 +4,9 @@ import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
-
 import org.specs2.mutable.Specification
 import org.specs2.time.NoTimeConversions
-
 import com.mongodb.casbah.Imports.MongoDBObject
-
 import controllers.Application
 import models.Config
 import models.MongoDB
@@ -20,6 +17,8 @@ import play.api.test.Helpers.BAD_REQUEST
 import play.api.test.Helpers.OK
 import play.api.test.WithServer
 import service.Service
+import models.Person
+import models.Location
 
 class ApplicationSpec extends Specification with NoTimeConversions {
 
@@ -56,8 +55,7 @@ class ApplicationSpec extends Specification with NoTimeConversions {
 
     "update a existing user" in new WithServer {
       val body = Map("id" -> Seq(idList(0)), "longitude" -> Seq("51.04"), "latitude" -> Seq("5.21"))
-      val response = saveRequest(port, body, OK)
-      (response \ "status").as[Int] must beEqualTo(OK)
+      val response = saveRequest(port, body)
       val response2 = getByLocation(port, 54.2, 5.2)
       (response2 \ "people").as[List[JsValue]].length must beEqualTo(3)
     }
@@ -68,14 +66,25 @@ class ApplicationSpec extends Specification with NoTimeConversions {
     }
 
     "get user by id" in new WithServer {
-      val response = getById(port, idList(0))
-      (response \ "location" \ "longitude").as[Double] must beEqualTo(51.04)
-      (response \ "location" \ "latitude").as[Double] must beEqualTo(4.21)
+      val response = getById(port, idList(1))
+      (response \ "location" \ "longitude").as[Double] must beEqualTo(54.2)
+      (response \ "location" \ "latitude").as[Double] must beEqualTo(5.2)
     }
 
     "get user by invalid id" in new WithServer {
       val response = getById(port, "test", BAD_REQUEST)
     }
+    
+    "find users by time" in new WithServer {
+      val response = getByTime(port, 156643413L)
+      (response \ "people").as[List[JsValue]].length must beEqualTo(4)
+    }
+    
+    "find users by time and location" in new WithServer {
+      val response = getByLocationAndTime(port, 54.2, 5.2, 156643413L)
+      (response \ "people").as[List[JsValue]].length must beEqualTo(4)
+    }
+    
   }
 
   def database = new MongoDB(Config.databaseName, "test")
@@ -85,7 +94,7 @@ class ApplicationSpec extends Specification with NoTimeConversions {
   lazy val idList = before
   
   def before: IndexedSeq[String] = {
-    for(i <- 0 to 4) yield Await.result(database.save(54.2, 5.2, None), 5 seconds)
+    for(i <- 1 to 4) yield Await.result(database.save(Person(Location(54.2, 5.2), 156643413L, None)), 5 seconds)
   }
   
   def after {
@@ -96,6 +105,11 @@ class ApplicationSpec extends Specification with NoTimeConversions {
     getRequest(port, "getByLocation", status, "longitude" -> String.valueOf(longitude), "latitude" -> String.valueOf(latitude))
   def saveRequest(port: Int, body: Map[String, Seq[String]], status: Int = OK): JsValue = postRequest(port, "save", status, body)
   def getById(port: Int, id: String, status: Int = OK): JsValue = getRequest(port, "getById", status, "id" -> id)
+  def getByTime(port: Int, time: Long, status: Int = OK): JsValue = getRequest(port, "getByTime", status, "time" -> String.valueOf(time))
+  def getByLocationAndTime(port: Int, latitude: Double, longitude: Double, time: Long, status: Int = OK): JsValue =
+    getRequest(port, "getByLocationAndTime", status, "longitude" -> String.valueOf(longitude), 
+                                                     "latitude" -> String.valueOf(latitude), 
+                                                     "time" -> String.valueOf(time))
 
   def postRequest(port: Int, url: String, status: Int, body: Map[String, Seq[String]]): JsValue = {
     val reponse = WS.url(s"http://localhost:$port/$url").post(body)

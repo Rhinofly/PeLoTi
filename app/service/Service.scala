@@ -14,13 +14,13 @@ import scala.util._
 class Service(repository: PersonRepository) {
   
   def getByLocation(longitude: Double, latitude: Double): Future[JsObject] = {
-    repository.getByLocation(longitude, latitude, 10).map {
+    repository.getByLocation(Location(longitude, latitude), 10).map {
       list => Json.obj("status" -> OK, "people" -> list)
     }
   }
   
   def savePerson(request: UpdateRequest): Future[JsObject] = {
-    repository.save(request.latitude, request.longitude, request.id).map(id => 
+    repository.save(Person(Location(request.latitude, request.longitude), request.time, request.id)).map(id => 
       Json.obj("status" -> OK, "id" -> id))
   }
   
@@ -31,7 +31,15 @@ class Service(repository: PersonRepository) {
     } catch {
       case e: Exception => Future(Json.obj("status" -> BAD_REQUEST, "message" -> e.getMessage))
     }
-  }  
+  }
+  
+  def getByTime(time: Long): Future[JsObject] = {
+    repository.getByTime(time).map(list => Json.obj("status" -> OK, "people" -> list))
+  }
+  
+  def getByLocationAndTime(longitude: Double, latitude: Double, time: Long): Future[JsObject] = {
+    repository.getByLocationAndTime(Location(longitude, latitude), 10, time).map(list => Json.obj("status" -> OK, "people" -> list))
+  }
 }
 
 object Service {

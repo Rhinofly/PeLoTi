@@ -11,35 +11,30 @@ class MongoDB(databaseName: String, collection: String) extends PersonRepository
   val mongoConnection = MongoConnection()
   val mongoCollection = mongoConnection(databaseName)(collection)
   
-  override def getByLocation(longitude: Double, latitude: Double, radius: Long): Future[List[Person]] = Future {
+  override def getByLocation(location: Location, radius: Long): Future[List[Person]] = Future {
     mongoCollection.find(
-        "location" $near(longitude, latitude) $maxDistance(radius * 1000)
-    ).map{ row => 
-        Person(row.as[MongoDBList]("location"), Option(row.get("_id").toString))
-    }.toList
+        "location" $near(location.longitude, location.latitude) $maxDistance(radius * 1000)
+    ).map(row => Person(row.as[MongoDBList]("location"), row.as[Long]("time"), Option(row.get("_id").toString))).toList
   }
   
-  override def save(longitude: Double, latitude: Double, optionId: Option[String]): Future[String] = {
-    if(optionId.isDefined) {
-      val id = optionId.get
-      val query = MongoDBObject("_id" -> new ObjectId(id))
-      val update = $set("location" -> MongoDBList(longitude, latitude))
-      val result = mongoCollection.update(query, update)
-      Future(id)
-    } else {
-      val mongoObject = MongoDBObject(
-        "location" -> MongoDBList(longitude, latitude)
-      )
-      mongoCollection.insert(mongoObject)
-      Future(mongoObject.get("_id").toString)
-    } 
+  override def getByTime(time: Long): Future[List[Person]] = Future {
+    mongoCollection.find(
+        "time" $gte time
+    ).map(row => Person(row.as[MongoDBList]("location"), row.as[Long]("time"), Option(row.get("_id").toString))).toList
+  }
+  
+  override def getByLocationAndTime(location: Location, radius: Long, time: Long): Future[List[Person]] = Future {
+    mongoCollection.find(
+         ("location" $near(location.longitude, location.latitude) $maxDistance(radius * 1000)) ++
+         ("time" $gte time)
+    ).map(row => Person(row.as[MongoDBList]("location"), row.as[Long]("time"), Option(row.get("_id").toString))).toList
   }
   
   override def getById(id: String): Future[Person] = {
     try {
       mongoCollection.findOne(MongoDBObject("_id" -> new ObjectId(id))).map { row =>
         Future { 
-          new Person(row.as[MongoDBList]("location"), Option(id))
+          new Person(row.as[MongoDBList]("location"), row.as[Long]("time"), Option(id))
         }
       }.getOrElse(throw new Exception("Invalid input"))
     } catch {
@@ -47,6 +42,22 @@ class MongoDB(databaseName: String, collection: String) extends PersonRepository
     }
   }
   
+  override def save(person: Person): Future[String] = {
+    if(person.id.isDefined) {
+      val id = person.id.get
+      val query = MongoDBObject("_id" -> new ObjectId(id))
+      val update = $set("location" -> MongoDBList(person.location.longitude, person.location.latitude), "time" -> person.time)
+      val result = mongoCollection.update(query, update)
+      Future(id)
+    } else {
+      val mongoObject = MongoDBObject(
+        "location" -> MongoDBList(person.location.longitude, person.location.latitude),
+        "time" -> person.time)
+      mongoCollection.insert(mongoObject)
+      Future(mongoObject.get("_id").toString)
+    } 
+  }
+
   implicit def toLocation(list: MongoDBList): Location = {
     new Location(list.get(0).asInstanceOf[Double], list.get(1).asInstanceOf[Double])
   }

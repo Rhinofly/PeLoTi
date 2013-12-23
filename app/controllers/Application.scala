@@ -24,7 +24,7 @@ import play.api.data.format.Formats._
 class Application(service: Service) extends Controller {
 
   def byLocation(longitude: Option[Double], latitude: Option[Double]) = Action.async {
-    if (latitude.isDefined && longitude.isDefined)
+    if (longitude.isDefined && latitude.isDefined)
       service.getByLocation(longitude.get, latitude.get).map(list => Ok(list))
     else
       Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
@@ -44,11 +44,26 @@ class Application(service: Service) extends Controller {
     else
       Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
   }
+  
+  def getByTime(time: Option[Long]) = Action.async {
+    if(time.isDefined)
+      service.getByTime(time.get).map(list => Ok(list))
+    else
+      Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
+  }
+  
+  def getByLocationAndTime(longitude: Option[Double], latitude: Option[Double], time: Option[Long]) = Action.async {
+    if(longitude.isDefined && latitude.isDefined && time.isDefined)
+      service.getByLocationAndTime(longitude.get, latitude.get, time.get).map(list => Ok(list))
+    else
+      Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
+  }
 
   def saveForm = Form(
     mapping(
       "longitude" -> of[Double],
       "latitude" -> of[Double],
+      "time" -> of[Long],
       "id" -> optional(text))(UpdateRequest.apply)(UpdateRequest.unapply))
 }
 
