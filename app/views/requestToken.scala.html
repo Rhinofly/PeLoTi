@@ -1,0 +1,18 @@
+@(form: Form[String])
+@import helper.twitterBootstrap._
+
+@main("Request a token") {
+  <div class="row">
+    <div class="main">
+      <h2>PeLoTi</h2>
+      <p>To be able to use the service you require a token.<br />
+      Fill in your email and thou shalt receive one magically!</p>
+      @helper.form(action = routes.Portal.requestTokenHandler) {
+        <div class="form-group">
+          @helper.inputText(form("email"), args = 'placeholder -> "Email", '_label -> "Email", '_showConstraints -> false)
+        </div>
+        <input type="submit" value="Request Token!" class="btn btn-primary" />
+      }
+    </div>
+  </div>  
+}
