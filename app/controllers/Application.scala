@@ -23,9 +23,12 @@ import play.api.data.format.Formats._
 
 class Application(service: Service) extends Controller {
 
-  def byLocation(longitude: Option[Double], latitude: Option[Double]) = Action.async {
+  def byLocation(longitude: Option[Double], latitude: Option[Double], radius: Option[Long]) = Action.async {
     if (longitude.isDefined && latitude.isDefined)
-      service.getByLocation(longitude.get, latitude.get).map(list => Ok(list))
+      if(radius.isDefined)
+        service.getByLocation(longitude.get, latitude.get, radius.get).map(list => Ok(list))
+      else
+        service.getByLocation(longitude.get, latitude.get).map(list => Ok(list))
     else
       Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
   }

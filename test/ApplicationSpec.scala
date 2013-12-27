@@ -25,12 +25,12 @@ class ApplicationSpec extends Specification with NoTimeConversions {
   "Service" should {
 
     "find users within region" in new WithServer {
-      val response = getByLocation(port, 54.2, 5.2)
+      val response = getByLocation(port, 54.2, 5.2, 10)
       (response \ "people").as[List[JsValue]].length must beEqualTo(4)
     }
 
     "find no users within region" in new WithServer {
-      val response = getByLocation(port, 24.4, 3.2)
+      val response = getByLocation(port, 24.4, 3.2, 10)
       (response \ "people").as[List[JsValue]].length must beEqualTo(0)
     }
 
@@ -43,7 +43,7 @@ class ApplicationSpec extends Specification with NoTimeConversions {
       val body = Map("longitude" -> Seq("54.24"), "latitude" -> Seq("5.23"), "token" -> Seq("string1"))
       val response = saveRequest(port, body, OK)
       (response \ "status").as[Int] must beEqualTo(OK)
-      val response2 = getByLocation(port, 54.2, 5.2)
+      val response2 = getByLocation(port, 54.2, 5.2, 10)
       (response2 \ "people").as[List[JsValue]].length must beEqualTo(5)
     }
 
@@ -56,7 +56,7 @@ class ApplicationSpec extends Specification with NoTimeConversions {
     "update a existing user" in new WithServer {
       val body = Map("id" -> Seq(idList(0)), "longitude" -> Seq("51.04"), "latitude" -> Seq("5.21"))
       val response = saveRequest(port, body)
-      val response2 = getByLocation(port, 54.2, 5.2)
+      val response2 = getByLocation(port, 54.2, 5.2, 10)
       (response2 \ "people").as[List[JsValue]].length must beEqualTo(3)
     }
 
@@ -101,8 +101,8 @@ class ApplicationSpec extends Specification with NoTimeConversions {
     database.mongoCollection.remove(MongoDBObject("latitude" -> 54.24))
   }
 
-  def getByLocation(port: Int, latitude: Double, longitude: Double, status: Int = OK): JsValue =
-    getRequest(port, "getByLocation", status, "longitude" -> String.valueOf(longitude), "latitude" -> String.valueOf(latitude))
+  def getByLocation(port: Int, latitude: Double, longitude: Double, radius: Long, status: Int = OK): JsValue =
+    getRequest(port, "getByLocation", status, "longitude" -> String.valueOf(longitude), "latitude" -> String.valueOf(latitude), "radius" -> String.valueOf(radius))
   def saveRequest(port: Int, body: Map[String, Seq[String]], status: Int = OK): JsValue = postRequest(port, "save", status, body)
   def getById(port: Int, id: String, status: Int = OK): JsValue = getRequest(port, "getById", status, "id" -> id)
   def getByTime(port: Int, time: Long, status: Int = OK): JsValue = getRequest(port, "getByTime", status, "time" -> String.valueOf(time))

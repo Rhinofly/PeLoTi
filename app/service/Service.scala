@@ -13,8 +13,8 @@ import scala.util._
 
 class Service(repository: PersonRepository) {
   
-  def getByLocation(longitude: Double, latitude: Double): Future[JsObject] = {
-    repository.getByLocation(Location(longitude, latitude), 10).map {
+  def getByLocation(longitude: Double, latitude: Double, radius: Long = 10): Future[JsObject] = {
+    repository.getByLocation(Location(longitude, latitude), radius).map {
       list => Json.obj("status" -> OK, "people" -> list)
     }
   }

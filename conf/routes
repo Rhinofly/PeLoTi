@@ -5,7 +5,7 @@
 GET     /requestToken               controllers.Portal.requestToken
 POST    /receiveToken               controllers.Portal.requestTokenHandler
 
-GET     /getByLocation              controllers.Application.byLocation(longitude: Option[Double], latitude: Option[Double])
+GET     /getByLocation              controllers.Application.byLocation(longitude: Option[Double], latitude: Option[Double], radius: Option[Long])
 POST    /save                       controllers.Application.save
 GET     /getById                    controllers.Application.byId(id: Option[String])
 GET     /getByTime                  controllers.Application.getByTime(time: Option[Long])
