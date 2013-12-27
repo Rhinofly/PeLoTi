@@ -22,6 +22,8 @@ import models.Location
 
 class ApplicationSpec extends Specification with NoTimeConversions {
 
+  var id = ""
+  
   "Service" should {
 
     "find users within region" in new WithServer {
@@ -36,13 +38,14 @@ class ApplicationSpec extends Specification with NoTimeConversions {
 
     "send BadRequest on missing parameters" in new WithServer {
       val response = getRequest(port, "getByLocation", BAD_REQUEST, ("latitude" -> "5.2"))
-      (response \ "message").as[String] must contain("Invalid parameters")
+      (response \ "message").as[String] must contain("Missing parameter: longitude")
     }
 
     "create a user" in new WithServer {
-      val body = Map("longitude" -> Seq("54.24"), "latitude" -> Seq("5.23"), "token" -> Seq("string1"))
+      val body = Map("longitude" -> Seq("54.2"), "latitude" -> Seq("5.2"), "time" -> Seq("156643414"))
       val response = saveRequest(port, body, OK)
       (response \ "status").as[Int] must beEqualTo(OK)
+      id = (response \ "id").as[String]
       val response2 = getByLocation(port, 54.2, 5.2, 10)
       (response2 \ "people").as[List[JsValue]].length must beEqualTo(5)
     }
@@ -54,21 +57,21 @@ class ApplicationSpec extends Specification with NoTimeConversions {
     }
 
     "update a existing user" in new WithServer {
-      val body = Map("id" -> Seq(idList(0)), "longitude" -> Seq("51.04"), "latitude" -> Seq("5.21"))
+      val body = Map("id" -> Seq(id), "longitude" -> Seq("51.04"), "latitude" -> Seq("5.21"), "time" -> Seq("156643432"))
       val response = saveRequest(port, body)
       val response2 = getByLocation(port, 54.2, 5.2, 10)
-      (response2 \ "people").as[List[JsValue]].length must beEqualTo(3)
+      (response2 \ "people").as[List[JsValue]].length must beEqualTo(4)
     }
 
     "update a user with invalid data" in new WithServer {
-      val body = Map("id" -> Seq(idList(0)))
+      val body = Map("id" -> Seq(id))
       val response = saveRequest(port, body, BAD_REQUEST)
     }
 
     "get user by id" in new WithServer {
-      val response = getById(port, idList(1))
-      (response \ "location" \ "longitude").as[Double] must beEqualTo(54.2)
-      (response \ "location" \ "latitude").as[Double] must beEqualTo(5.2)
+      val response = getById(port, id)
+      (response \ "location" \ "longitude").as[Double] must beEqualTo(51.04)
+      (response \ "location" \ "latitude").as[Double] must beEqualTo(5.21)
     }
 
     "get user by invalid id" in new WithServer {
@@ -76,40 +79,30 @@ class ApplicationSpec extends Specification with NoTimeConversions {
     }
     
     "find users by time" in new WithServer {
-      val response = getByTime(port, 156643413L)
-      (response \ "people").as[List[JsValue]].length must beEqualTo(4)
+      val response = getByTime(port, 156643413L, 156643414L)
+      (response \ "people").as[List[JsValue]].length must beEqualTo(5)
     }
     
     "find users by time and location" in new WithServer {
       val response = getByLocationAndTime(port, 54.2, 5.2, 156643413L)
       (response \ "people").as[List[JsValue]].length must beEqualTo(4)
     }
-    
   }
 
   def database = new MongoDB(Config.databaseName, "test")
   def service = Service(database)
   def application = new Application(service)
-  
-  lazy val idList = before
-  
-  def before: IndexedSeq[String] = {
-    for(i <- 1 to 4) yield Await.result(database.save(Person(Location(54.2, 5.2), 156643413L, None)), 5 seconds)
-  }
-  
-  def after {
-    database.mongoCollection.remove(MongoDBObject("latitude" -> 54.24))
-  }
 
-  def getByLocation(port: Int, latitude: Double, longitude: Double, radius: Long, status: Int = OK): JsValue =
+  def getByLocation(port: Int, longitude: Double, latitude: Double, radius: Long, status: Int = OK): JsValue =
     getRequest(port, "getByLocation", status, "longitude" -> String.valueOf(longitude), "latitude" -> String.valueOf(latitude), "radius" -> String.valueOf(radius))
   def saveRequest(port: Int, body: Map[String, Seq[String]], status: Int = OK): JsValue = postRequest(port, "save", status, body)
   def getById(port: Int, id: String, status: Int = OK): JsValue = getRequest(port, "getById", status, "id" -> id)
-  def getByTime(port: Int, time: Long, status: Int = OK): JsValue = getRequest(port, "getByTime", status, "time" -> String.valueOf(time))
-  def getByLocationAndTime(port: Int, latitude: Double, longitude: Double, time: Long, status: Int = OK): JsValue =
+  def getByTime(port: Int, start: Long, end: Long, status: Int = OK): JsValue = 
+    getRequest(port, "getByTime", status, "start" -> String.valueOf(start), "end" -> String.valueOf(end))
+  def getByLocationAndTime(port: Int, longitude: Double, latitude: Double, start: Long, status: Int = OK): JsValue =
     getRequest(port, "getByLocationAndTime", status, "longitude" -> String.valueOf(longitude), 
                                                      "latitude" -> String.valueOf(latitude), 
-                                                     "time" -> String.valueOf(time))
+                                                     "start" -> String.valueOf(start))
 
   def postRequest(port: Int, url: String, status: Int, body: Map[String, Seq[String]]): JsValue = {
     val reponse = WS.url(s"http://localhost:$port/$url").post(body)

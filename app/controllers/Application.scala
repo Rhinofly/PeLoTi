@@ -23,14 +23,8 @@ import play.api.data.format.Formats._
 
 class Application(service: Service) extends Controller {
 
-  def byLocation(longitude: Option[Double], latitude: Option[Double], radius: Option[Long]) = Action.async {
-    if (longitude.isDefined && latitude.isDefined)
-      if(radius.isDefined)
-        service.getByLocation(longitude.get, latitude.get, radius.get).map(list => Ok(list))
-      else
-        service.getByLocation(longitude.get, latitude.get).map(list => Ok(list))
-    else
-      Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
+  def byLocation(longitude: Double, latitude: Double, radius: Long) = Action.async {
+    service.getByLocation(longitude, latitude, radius).map(list => Ok(list))
   }
 
   def save = Action.async { implicit request =>
@@ -41,25 +35,16 @@ class Application(service: Service) extends Controller {
       })
   }
 
-  def byId(id: Option[String]) = Action.async {
-    if (id.isDefined)
-      service.getById(id.get).map(person => Ok(person))
-    else
-      Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
+  def byId(id: String) = Action.async {
+      service.getById(id).map(person => Ok(person))
   }
   
-  def getByTime(time: Option[Long]) = Action.async {
-    if(time.isDefined)
-      service.getByTime(time.get).map(list => Ok(list))
-    else
-      Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
+  def getByTime(start: Long, end: Option[Long]) = Action.async {
+      service.getByTime(start, end).map(list => Ok(list))
   }
   
-  def getByLocationAndTime(longitude: Option[Double], latitude: Option[Double], time: Option[Long]) = Action.async {
-    if(longitude.isDefined && latitude.isDefined && time.isDefined)
-      service.getByLocationAndTime(longitude.get, latitude.get, time.get).map(list => Ok(list))
-    else
-      Future(BadRequest(Json.obj("status" -> BAD_REQUEST, "message" -> "Invalid parameters")))
+  def getByLocationAndTime(longitude: Double, latitude: Double, start: Long, end: Option[Long]) = Action.async {
+      service.getByLocationAndTime(longitude, latitude, start, end).map(list => Ok(list))
   }
 
   def saveForm = Form(

@@ -5,11 +5,11 @@
 GET     /requestToken               controllers.Portal.requestToken
 POST    /receiveToken               controllers.Portal.requestTokenHandler
 
-GET     /getByLocation              controllers.Application.byLocation(longitude: Option[Double], latitude: Option[Double], radius: Option[Long])
+GET     /getByLocation              controllers.Application.byLocation(longitude: Double, latitude: Double, radius: Long ?= 10)
 POST    /save                       controllers.Application.save
-GET     /getById                    controllers.Application.byId(id: Option[String])
-GET     /getByTime                  controllers.Application.getByTime(time: Option[Long])
-GET     /getByLocationAndTime       controllers.Application.getByLocationAndTime(longitude: Option[Double], latitude: Option[Double], time: Option[Long])
+GET     /getById                    controllers.Application.byId(id: String)
+GET     /getByTime                  controllers.Application.getByTime(start: Long, end: Option[Long])
+GET     /getByLocationAndTime       controllers.Application.getByLocationAndTime(longitude: Double, latitude: Double, start: Long, end: Option[Long])
 
 # Map static resources from the /public folder to the /assets URL path
 GET     /assets/*file               controllers.Assets.at(path="/public", file)
