@@ -4,13 +4,14 @@ import models._
 import play.api.libs.Codecs
 import scala.collection.immutable.StringOps
 import play.api.libs.json._
-import models.requests._
+import models.repository._
 import play.api.http.Status._
-import models.requests._
 import scala.concurrent.Future
 import play.api.libs.concurrent.Execution.Implicits._
 import scala.util._
 import play.api.libs.json.Json.JsValueWrapper
+import models.repository.PersonRepository
+import models.UpdateRequest
 
 class Service(repository: PersonRepository) {
   

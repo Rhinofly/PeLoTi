@@ -1,10 +1,11 @@
-package models
+package models.repository
 
 import com.mongodb.casbah.Imports._
 import scala.concurrent.Future
+import models.Location
+import models.Person
 
 trait PersonRepository {
-  
   def getById(id: String): Future[Person]
   def getByLocation(location: Location, radius: Long): Future[List[Person]]
   def getByTime(start: Long, end: Option[Long]): Future[List[Person]]

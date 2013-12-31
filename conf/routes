@@ -2,9 +2,12 @@
 # This file defines all application routes (Higher priority routes first)
 # ~~~~
 
+#Portal
 GET     /requestToken               controllers.Portal.requestToken
 POST    /receiveToken               controllers.Portal.requestTokenHandler
+POST    /token                      controllers.Portal.getToken
 
+# Service
 GET     /getByLocation              controllers.Application.byLocation(longitude: Double, latitude: Double, radius: Long ?= 10)
 POST    /save                       controllers.Application.save
 GET     /getById                    controllers.Application.byId(id: String)

@@ -2,7 +2,7 @@ package controllers
 
 import scala.concurrent.Future
 import models._
-import models.requests._
+import models.repository._
 import play.api.libs.json.JsError
 import play.api.libs.json.JsObject
 import play.api.libs.json.Json
@@ -20,6 +20,7 @@ import play.api.data._
 import play.api.data.Form._
 import play.api.data.Forms._
 import play.api.data.format.Formats._
+import models.UpdateRequest
 
 class Application(service: Service) extends Controller {
 
@@ -55,4 +56,4 @@ class Application(service: Service) extends Controller {
       "id" -> optional(text))(UpdateRequest.apply)(UpdateRequest.unapply))
 }
 
-object Application extends Application(Service(new MongoDB(Config.databaseName, "test")))
+object Application extends Application(Service(new MongoPersonRepository(Config.databaseName, "test")))

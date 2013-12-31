@@ -9,7 +9,7 @@ import org.specs2.time.NoTimeConversions
 import com.mongodb.casbah.Imports.MongoDBObject
 import controllers.Application
 import models.Config
-import models.MongoDB
+import models.repository.MongoPersonRepository
 import play.api.libs.json.JsValue
 import play.api.libs.ws.Response
 import play.api.libs.ws.WS
@@ -80,7 +80,7 @@ class ApplicationSpec extends Specification with NoTimeConversions {
     
     "find users by time" in new WithServer {
       val response = getByTime(port, 156643413L, 156643414L)
-      (response \ "people").as[List[JsValue]].length must beEqualTo(5)
+      (response \ "people").as[List[JsValue]].length must beEqualTo(4)
     }
     
     "find users by time and location" in new WithServer {
@@ -89,7 +89,7 @@ class ApplicationSpec extends Specification with NoTimeConversions {
     }
   }
 
-  def database = new MongoDB(Config.databaseName, "test")
+  def database = new MongoPersonRepository(Config.databaseName, "test")
   def service = Service(database)
   def application = new Application(service)
 

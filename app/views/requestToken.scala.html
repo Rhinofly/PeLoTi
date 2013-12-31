@@ -1,5 +1,6 @@
-@(form: Form[String])
+@(form: Form[TokenRequest])
 @import helper.twitterBootstrap._
+
 
 @main("Request a token") {
   <div class="row">
@@ -10,6 +11,7 @@
       @helper.form(action = routes.Portal.requestTokenHandler) {
         <div class="form-group">
           @helper.inputText(form("email"), args = 'placeholder -> "Email", '_label -> "Email", '_showConstraints -> false)
+          @helper.inputPassword(form("password"), args = 'placeholder -> "Password", '_label -> "Password", '_showConstraints -> false)
         </div>
         <input type="submit" value="Request Token!" class="btn btn-primary" />
       }

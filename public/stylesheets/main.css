@@ -11,3 +11,7 @@ body {
 .help-inline {
 	color: red;
 }
+
+input {
+  width: 100%;	
+}

@@ -1,13 +1,11 @@
-package models
+package models.repository
 
 import com.mongodb.casbah.Imports._
-import com.mongodb.casbah.Imports.ObjectId
-import play.api.http.Status.OK
-import play.api.http.Status.BAD_REQUEST
 import scala.concurrent.Future
 import play.api.libs.concurrent.Execution.Implicits._
+import models._
 
-class MongoDB(databaseName: String, collection: String) extends PersonRepository {
+class MongoPersonRepository(databaseName: String, collection: String) extends PersonRepository {
   val mongoConnection = MongoConnection()
   val mongoCollection = mongoConnection(databaseName)(collection)
   

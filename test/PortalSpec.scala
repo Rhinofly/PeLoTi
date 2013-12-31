@@ -6,30 +6,35 @@ import play.api.libs.json._
 import play.api.mvc._
 import play.api.test._
 import play.api.test.Helpers._
-import service.Service
 import controllers.Portal
 import service.PortalService
+import models._
+import models.repository._
 
 class PortalSpec extends Specification {
   "Portal" should {
     "request token" in new WithApplication {
-      val token = service.generateToken("test@example.com")
-      val response = tokenRequest(("email", "test@example.com"))
+      val token = service.generateToken("test@example.com".getBytes, "password".getBytes)
+      val response = tokenRequest("email" -> "test@example.com", "password" -> "password")
       status(response) must equalTo(OK)
       contentAsString(response) must contain(s"""<label id="token">$token</label>""")
     }
     
-    "request token with invalid email" in new WithApplication {
+    "request token with invalid form" in new WithApplication {
       val response = tokenRequest(("email", "test"))
-      status(response) must equalTo(OK)
-      contentAsString(response) must contain("Valid email required")
+      status(response) must equalTo(BAD_REQUEST)
+    }
+    
+    "request token with taken" in new WithApplication {
+      val response = tokenRequest("email" -> "test@example.com", "password" -> "password")
+      status(response) must equalTo(BAD_REQUEST)
     }
   }
-  
-  def service = PortalService.apply
+  def repository = new MongoUserRepository(Config.databaseName, "test")
+  def service = PortalService(repository)
   def portal = new Portal(service)
   
-  def tokenRequest(data: (String, String)): Future[SimpleResult] = {
-    portal.requestTokenHandler(FakeRequest(POST, "/receive").withFormUrlEncodedBody(data))
+  def tokenRequest(data: (String, String)*): Future[SimpleResult] = {
+    portal.requestTokenHandler(FakeRequest(POST, "/receive").withFormUrlEncodedBody(data :_*))
   }
 }
