@@ -1,6 +1,7 @@
 package service
 
 import play.api.libs.Codecs
+import org.mindrot.jbcrypt.BCrypt
 import models._
 import models.repository.UserRepository
 
@@ -8,7 +9,8 @@ class PortalService(repository: UserRepository) {
     
   def createUser(request: TokenRequest): String = {
     val token = generateToken(request.email.getBytes, request.password.getBytes)
-    repository.create(request.email, request.password, token)
+    val encryptedPassword = encryptPassword(request.password)
+    repository.create(request.email, encryptedPassword, token)
     token
   }
   
@@ -22,6 +24,14 @@ class PortalService(repository: UserRepository) {
   
   def generateToken(emailBytes: Array[Byte], passwordBytes: Array[Byte]): String = {
     Codecs.md5(emailBytes ++ passwordBytes)
+  }
+  
+  def encryptPassword(password: String): String = {
+    BCrypt.hashpw(password, BCrypt.gensalt(12))
+  }
+  
+  def checkPassword(password: String, hash: String): Boolean = {
+    BCrypt.checkpw(password, hash)
   }
 }
 

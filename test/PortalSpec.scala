@@ -12,10 +12,12 @@ import models._
 import models.repository._
 
 class PortalSpec extends Specification {
+  val email = "test@example.com"
+  
   "Portal" should {
     "request token" in new WithApplication {
-      val token = service.generateToken("test@example.com".getBytes, "password".getBytes)
-      val response = tokenRequest("email" -> "test@example.com", "password" -> "password")
+      val token = service.generateToken(email.getBytes, "password".getBytes)
+      val response = tokenRequest("email" -> email, "password" -> "password")
       status(response) must equalTo(OK)
       contentAsString(response) must contain(s"""<label id="token">$token</label>""")
     }
@@ -25,9 +27,14 @@ class PortalSpec extends Specification {
       status(response) must equalTo(BAD_REQUEST)
     }
     
-    "request token with taken" in new WithApplication {
-      val response = tokenRequest("email" -> "test@example.com", "password" -> "password")
+    "request token with already used email" in new WithApplication {
+      val response = tokenRequest("email" -> email, "password" -> "password")
       status(response) must equalTo(BAD_REQUEST)
+    }
+    
+    "should be able to verify password" in new WithApplication {
+      val hash = service.encryptPassword("password")
+      service.checkPassword("password", hash) must equalTo(true)
     }
   }
   def repository = new MongoUserRepository(Config.databaseName, "test")
