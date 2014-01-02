@@ -5,6 +5,7 @@ import scala.concurrent.Await
 import scala.concurrent.Future
 import play.api.libs.concurrent.Execution.Implicits._
 import scala.concurrent.duration._
+import scala.language.postfixOps 
 
 class MongoUserRepository(databaseName: String, collection: String) extends UserRepository {
   val mongoConnection = MongoConnection()
@@ -26,5 +27,18 @@ class MongoUserRepository(databaseName: String, collection: String) extends User
   override def exists(email: String): Boolean = {
     val result = Future(mongoCollection.findOneByID(email).map(_ => true).getOrElse(false))
     Await.result(result, 3 seconds)
+  }
+  
+  override def getPassword(email: String): Option[String] = {
+    mongoCollection.findOneByID(email).map(user => {
+      user.as[String]("password")
+    })
+  }
+  
+  override def changePassword(email: String, newPassword: String) {
+      val query = MongoDBObject("_id" -> email)
+      val update = $set(
+          "password" -> newPassword)
+      val result = mongoCollection.update(query, update)
   }
 }

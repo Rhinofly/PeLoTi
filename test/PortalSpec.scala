@@ -36,6 +36,11 @@ class PortalSpec extends Specification {
       val hash = service.encryptPassword("password")
       service.checkPassword("password", hash) must equalTo(true)
     }
+    
+    "should be able to change password" in new WithApplication {
+      val response = changePasswordRequest("email" -> email, "oldPassword" -> "password", "newPassword" -> "newPassword")
+      status(response) must equalTo(OK)
+    }
   }
   def repository = new MongoUserRepository(Config.databaseName, "test")
   def service = PortalService(repository)
@@ -43,5 +48,9 @@ class PortalSpec extends Specification {
   
   def tokenRequest(data: (String, String)*): Future[SimpleResult] = {
     portal.requestTokenHandler(FakeRequest(POST, "/receive").withFormUrlEncodedBody(data :_*))
+  }
+  
+  def changePasswordRequest(data: (String, String)*): Future[SimpleResult] = {
+    portal.changePassword(FakeRequest(POST, "changePassword").withFormUrlEncodedBody(data :_*))
   }
 }

@@ -6,6 +6,8 @@
 GET     /requestToken               controllers.Portal.requestToken
 POST    /receiveToken               controllers.Portal.requestTokenHandler
 POST    /token                      controllers.Portal.getToken
+POST    /changePassword             controllers.Portal.changePasswordHandler
+GET     /changePassword             controllers.Portal.changePassword
 
 # Service
 GET     /getByLocation              controllers.Application.byLocation(longitude: Double, latitude: Double, radius: Long ?= 10)
