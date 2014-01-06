@@ -19,6 +19,8 @@ import play.api.test.WithServer
 import service.Service
 import models.Person
 import models.Location
+import play.api.libs.json.JsObject
+import play.api.libs.json.Json
 
 class ApplicationSpec extends Specification with NoTimeConversions {
 
@@ -70,8 +72,8 @@ class ApplicationSpec extends Specification with NoTimeConversions {
 
     "get user by id" in new WithServer {
       val response = getById(port, id)
-      (response \ "location" \ "longitude").as[Double] must beEqualTo(51.04)
-      (response \ "location" \ "latitude").as[Double] must beEqualTo(5.21)
+      (response \ "person" \ "location" \ "longitude").as[Double] must beEqualTo(51.04)
+      (response \ "person" \ "location" \ "latitude").as[Double] must beEqualTo(5.21)
     }
 
     "get user by invalid id" in new WithServer {
@@ -86,6 +88,12 @@ class ApplicationSpec extends Specification with NoTimeConversions {
     "find users by time and location" in new WithServer {
       val response = getByLocationAndTime(port, 54.2, 5.2, 156643413L)
       (response \ "people").as[List[JsValue]].length must beEqualTo(4)
+    }
+    
+    "store extra data on a user" in new WithServer {
+      val map = Map("id" -> Seq("52c16de5353ba18414b57426"), "extras[0].key" -> Seq("key"), "extras[0].value" -> Seq("value"))
+      val response = postRequest(port, "storeExtra", OK, map)
+      (response \ "person" \ "extra" \ "key").as[String] must beEqualTo("value")
     }
   }
 

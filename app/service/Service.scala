@@ -22,14 +22,14 @@ class Service(repository: PersonRepository) {
   }
   
   def savePerson(request: UpdateRequest): Future[JsObject] = {
-    repository.save(Person(Location(request.latitude, request.longitude), request.time, request.id)).map(id => 
+    repository.save(Person(Location(request.latitude, request.longitude), request.time, request.id, None)).map(id => 
      createResponse("id" -> id))
   }
   
   def getById(id: String): Future[JsObject] = {
     try {
       repository.getById(id).map(person => 
-        createResponse("location" -> person.location))
+        createResponse("person" -> person))
     } catch {
       case e: Exception => Future(Json.obj("status" -> BAD_REQUEST, "message" -> e.getMessage))
     }
@@ -43,9 +43,13 @@ class Service(repository: PersonRepository) {
     repository.getByLocationAndTime(Location(longitude, latitude), 10, start, end).map(list => createResponse("people" -> list))
   }
   
-  def createResponse(response: (String, JsValueWrapper)): JsObject = {
-    Json.obj("status" -> OK, response)
+  def storeData(request: ExtraDataRequest): Future[JsObject] = {
+    repository.saveExtra(request.id, request.values.map(field => field.key -> field.value)).map {
+      person => createResponse("person" -> person)
+    }
   }
+  
+  def createResponse(response: (String, JsValueWrapper)): JsObject = Json.obj("status" -> OK, response)
 }
 
 object Service {

@@ -3,15 +3,16 @@
 # ~~~~
 
 #Portal
-GET     /requestToken               controllers.Portal.requestToken
 POST    /receiveToken               controllers.Portal.requestTokenHandler
 POST    /token                      controllers.Portal.getToken
 POST    /changePassword             controllers.Portal.changePasswordHandler
+GET     /requestToken               controllers.Portal.requestToken
 GET     /changePassword             controllers.Portal.changePassword
 
 # Service
-GET     /getByLocation              controllers.Application.byLocation(longitude: Double, latitude: Double, radius: Long ?= 10)
 POST    /save                       controllers.Application.save
+POST    /storeExtra                 controllers.Application.storeExtra
+GET     /getByLocation              controllers.Application.byLocation(longitude: Double, latitude: Double, radius: Long ?= 10)
 GET     /getById                    controllers.Application.byId(id: String)
 GET     /getByTime                  controllers.Application.getByTime(start: Long, end: Option[Long])
 GET     /getByLocationAndTime       controllers.Application.getByLocationAndTime(longitude: Double, latitude: Double, start: Long, end: Option[Long])
