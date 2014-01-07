@@ -1,7 +1,8 @@
 package models
 
+import play.api.Application
+
 object Config {
-  def config = play.api.Play.current.configuration
-  
-  def databaseName = config.getString("db.default.name").getOrElse("peloti")
+  def databaseName(implicit app:Application) = app.configuration.getString("db.default.name").getOrElse("peloti")
+  def apiUrl(implicit app:Application) = app.configuration.getString("peloti.url").getOrElse("localhost:9000")
 }

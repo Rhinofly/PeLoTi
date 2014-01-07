@@ -1,130 +1,265 @@
-import scala.annotation.implicitNotFound
-import scala.collection.mutable.ListBuffer
-import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.Implicits.global
+// format: +preserveDanglingCloseParenthesis
+
+package test
+
 import scala.concurrent.Future
-import scala.concurrent.duration.DurationInt
 import org.specs2.mutable.Specification
 import org.specs2.time.NoTimeConversions
-import com.mongodb.casbah.Imports.MongoDBObject
-import controllers.Application
-import models.Config
-import models.repository.MongoPersonRepository
+import controllers.Service
+import models.repository.PersonRepository
+import models.service.Location
+import models.service.Person
 import play.api.libs.json.JsValue
-import play.api.libs.ws.Response
-import play.api.libs.ws.WS
-import play.api.test.Helpers.BAD_REQUEST
-import play.api.test.Helpers.OK
-import play.api.test.WithServer
-import service.Service
-import models.Person
-import models.Location
-import play.api.libs.json.JsObject
 import play.api.libs.json.Json
+import play.api.libs.json.Json.toJsFieldJsValueWrapper
+import play.api.test.FakeRequest
+import play.api.test.Helpers.BAD_REQUEST
+import play.api.test.Helpers.GET
+import play.api.test.Helpers.INTERNAL_SERVER_ERROR
+import play.api.test.Helpers.OK
+import play.api.test.Helpers.route
+import play.api.test.Helpers.writeableOf_AnyContentAsEmpty
+import play.api.test.WithServer
+import reactor.{ Service => reactorService }
+import test.repository.MemoryPersonRepository
+import play.api.test.FakeApplication
+import global.Global
+import test.repository.MemoryUserRepository
 
-class ApplicationSpec extends Specification with NoTimeConversions {
+class ApplicationSpec extends Specification with TestRequest with NoTimeConversions {
+  sequential
 
-  var id = ""
-  
+  private var id = "1"
+  private val databaseName = "test"
+
   "Service" should {
 
-    "find users within region" in new WithServer {
-      val response = getByLocation(port, 54.2, 5.2, 10)
-      (response \ "people").as[List[JsValue]].length must beEqualTo(4)
+    "be able to find users" >> {
+
+      "by location" in {
+        val response = getByLocation(54.2, 5.2, 20)
+        (response \ "people").as[List[JsValue]].length must beEqualTo(4)
+      }
+
+      "by location without result" in {
+        val response = getByLocation(24.4, 3.2, 10)
+        (response \ "people").as[List[JsValue]].length must beEqualTo(0)
+      }
+
+      "by time" in {
+        val response = getByTime(156643413L, 156643414L)
+        (response \ "people").as[List[JsValue]].length must beEqualTo(3)
+      }
+
+      "by location and time" in {
+        val response = getByLocationAndTime(54.2, 5.2, 156643413L)
+        (response \ "people").as[List[JsValue]].length must beEqualTo(2)
+      }
+
+      "and respond correctly to exceptions in a future" in {
+        testStatus(executeGetAction(badFutureService.byLocation(54.2, 5.2, 10)), INTERNAL_SERVER_ERROR)
+        testStatus(executeGetAction(badFutureService.getByTime(156643413L, Option(156643414L))), INTERNAL_SERVER_ERROR)
+        testStatus(executeGetAction(badFutureService.getByLocationAndTime(54.2, 5.2, 156643413, None)), INTERNAL_SERVER_ERROR)
+      }
+
+      "and respond correctly to exceptions in the code" in {
+        testStatus(executeGetAction(badCodeService.byLocation(54.2, 5.2, 10)), INTERNAL_SERVER_ERROR)
+        testStatus(executeGetAction(badCodeService.getByTime(156643413L, Option(156643414L))), INTERNAL_SERVER_ERROR)
+        testStatus(executeGetAction(badCodeService.getByLocationAndTime(54.2, 5.2, 156643413, None)), INTERNAL_SERVER_ERROR)
+      }
+
+      "respond with a bad request when missing parameters in a get by location request" in new WithServer(
+        FakeApplication(withGlobal = Option(new Global(application => Future.successful(repository),
+          application => new MemoryUserRepository, new TestEncryption)))) {
+        def testBadRequest(path: String, parameters: String) = {
+          val response = route(FakeRequest(GET, s"/$path?$parameters")).get
+          testStatus(response, BAD_REQUEST)
+        }
+        testBadRequest("getByLocation", "latitude=5.2")
+        testBadRequest("getByLocation", "longitude=54.2")
+        testBadRequest("getByTime", "end=154487454")
+        testBadRequest("getByLocationAndTime", "latitude=5.2&longitude=54.2")
+        testBadRequest("getByLocationAndTime", "latitude=5.2&start=154487454")
+        testBadRequest("getByLocationAndTime", "longitude=54.2&start=154487454")
+      }
     }
 
-    "find no users within region" in new WithServer {
-      val response = getByLocation(port, 24.4, 3.2, 10)
-      (response \ "people").as[List[JsValue]].length must beEqualTo(0)
+    "have a create user method that" >> {
+      val createParameters = Map("longitude" -> "54.2", "latitude" -> "5.2", "time" -> "156643414")
+
+      "responds with the correct status" in {
+        val response = executePostAction(serviceController.create, createParameters)
+        testStatus(response, OK)
+      }
+
+      "should result in a new location" in {
+        create(createParameters.toSeq: _*)
+        val response = getByLocation(54.2, 5.2, 10)
+        (response \ "people").as[List[JsValue]].length must beEqualTo(4)
+      }
+
+      "responds with a bad request when missing parameters" in {
+        def testBadRequest(parameters: Map[String, String]) = {
+          val response = executePostAction(serviceController.create, parameters)
+          testStatus(response, BAD_REQUEST)
+        }
+        testBadRequest(createParameters - "longitude")
+        testBadRequest(createParameters - "latitude")
+        testBadRequest(createParameters - "time")
+      }
+
+      "responds with a valid person" in {
+        val response = create(createParameters.toSeq: _*)
+        val expectedLocation =
+          Json.obj(
+            "longitude" -> createParameters("longitude").toDouble,
+            "latitude" -> createParameters("latitude").toDouble
+          )
+        val person = response \ "person"
+        val location = person \ "location"
+        location === expectedLocation
+        (person \ "time").as[Long] === createParameters("time").toLong
+        (person \ "id").as[String] must not beEmpty
+      }
+
+      "does not duplicate id's" in {
+        def createRequest = {
+          val response = executePostAction(serviceController.create, createParameters)
+          testStatus(response, OK)
+          contentAsJson(response)
+        }
+        val json1 = createRequest
+        val json2 = createRequest
+        (json1 \ "person" \ "id").as[String] mustNotEqual ((json2 \ "person" \ "id").as[String])
+      }
+
+      "and respond correctly to exceptions in a future" in {
+        testStatus(executePostAction(badFutureService.create, createParameters), INTERNAL_SERVER_ERROR)
+      }
+
+      "and respond correctly to exceptions in the code" in {
+        testStatus(executePostAction(badCodeService.create, createParameters), INTERNAL_SERVER_ERROR)
+      }
     }
 
-    "send BadRequest on missing parameters" in new WithServer {
-      val response = getRequest(port, "getByLocation", BAD_REQUEST, ("latitude" -> "5.2"))
-      (response \ "message").as[String] must contain("Missing parameter: longitude")
+    "update a existing user" >> {
+      val updateParameters = Map("id" -> id, "longitude" -> "51.04", "latitude" -> "5.21", "time" -> "156643432")
+
+      "with the correct status" in {
+        val response = executePostAction(serviceController.update, updateParameters)
+        testStatus(response, OK)
+      }
+
+      "update a user with invalid data" in {
+        val response = executePostAction(serviceController.update, updateParameters - "id")
+        testStatus(response, BAD_REQUEST)
+      }
+
+      "should result in location search to be one less" in {
+        update(updateParameters)
+        val response = getByLocation(54.2, 5.2, 10)
+        (response \ "people").as[List[JsValue]].length must beEqualTo(6)
+      }
+
+      "should update the correct user" in {
+        val json = update(updateParameters)
+        (json \ "person" \ "id").as[String] === id
+      }
     }
 
-    "create a user" in new WithServer {
-      val body = Map("longitude" -> Seq("54.2"), "latitude" -> Seq("5.2"), "time" -> Seq("156643414"))
-      val response = saveRequest(port, body, OK)
-      (response \ "status").as[Int] must beEqualTo(OK)
-      id = (response \ "id").as[String]
-      val response2 = getByLocation(port, 54.2, 5.2, 10)
-      (response2 \ "people").as[List[JsValue]].length must beEqualTo(5)
+    "get user by id" >> {
+
+      "with the correct status" in {
+        val response = executeGetAction(serviceController.byId(id))
+        testStatus(response, OK)
+      }
+
+      "with expected data" in {
+        val response = getById(id)
+        (response \ "person" \ "location" \ "longitude").as[Double] must beEqualTo(51.04)
+        (response \ "person" \ "location" \ "latitude").as[Double] must beEqualTo(5.21)
+      }
+
+      "with a bad request when id is invalid" in {
+        val response = executeGetAction(serviceController.byId("1337"))
+        testStatus(response, BAD_REQUEST)
+      }
+
+      "and respond correctly to exceptions in a future" in {
+        testStatus(executeGetAction(badFutureService.byId(id)), INTERNAL_SERVER_ERROR)
+      }
+
+      "and respond correctly to exceptions in the code" in {
+        testStatus(executeGetAction(badCodeService.byId(id)), INTERNAL_SERVER_ERROR)
+      }
+
     }
 
-    "new users should get diffrent id" in new WithServer {
-      val body = Map("longitude" -> Seq("54.24"), "latitude" -> Seq("5.23"), "token" -> Seq("string1"))
-      def response = saveRequest(port, body, OK)
-      (response \ "id").as[String] mustNotEqual ((response \ "id").as[String])
-    }
+    "store extra data on a user" >> {
+      val extraParameters = Map("id" -> id, "extras[0].key" -> "key", "extras[0].value" -> "value")
 
-    "update a existing user" in new WithServer {
-      val body = Map("id" -> Seq(id), "longitude" -> Seq("51.04"), "latitude" -> Seq("5.21"), "time" -> Seq("156643432"))
-      val response = saveRequest(port, body)
-      val response2 = getByLocation(port, 54.2, 5.2, 10)
-      (response2 \ "people").as[List[JsValue]].length must beEqualTo(4)
-    }
+      "with the correct status" in {
+        val response = update(extraParameters)
+        (response \ "person" \ "extra" \ "key").as[String] must beEqualTo("value")
+      }
 
-    "update a user with invalid data" in new WithServer {
-      val body = Map("id" -> Seq(id))
-      val response = saveRequest(port, body, BAD_REQUEST)
-    }
+      "with expected data" in {
+        def testBadRequest(parameters: Map[String, String]) = {
+          val response = executePostAction(serviceController.update, parameters)
+          testStatus(response, BAD_REQUEST)
+        }
+        testBadRequest(extraParameters - "extras[0].value")
+        testBadRequest(extraParameters - "extras[0].key")
+        testBadRequest(extraParameters - "id")
+      }
 
-    "get user by id" in new WithServer {
-      val response = getById(port, id)
-      (response \ "person" \ "location" \ "longitude").as[Double] must beEqualTo(51.04)
-      (response \ "person" \ "location" \ "latitude").as[Double] must beEqualTo(5.21)
-    }
-
-    "get user by invalid id" in new WithServer {
-      val response = getById(port, "test", BAD_REQUEST)
-    }
-    
-    "find users by time" in new WithServer {
-      val response = getByTime(port, 156643413L, 156643414L)
-      (response \ "people").as[List[JsValue]].length must beEqualTo(4)
-    }
-    
-    "find users by time and location" in new WithServer {
-      val response = getByLocationAndTime(port, 54.2, 5.2, 156643413L)
-      (response \ "people").as[List[JsValue]].length must beEqualTo(4)
-    }
-    
-    "store extra data on a user" in new WithServer {
-      val map = Map("id" -> Seq("52c16de5353ba18414b57426"), "extras[0].key" -> Seq("key"), "extras[0].value" -> Seq("value"))
-      val response = postRequest(port, "storeExtra", OK, map)
-      (response \ "person" \ "extra" \ "key").as[String] must beEqualTo("value")
+      "should be persistant when updating a user" in {
+        val response = update(Map("id" -> "2", "longitude" -> "51.04", "latitude" -> "5.21", "time" -> "156643432"))
+        (response \ "person" \ "extra" \ "key").as[String] must beEqualTo("value")
+      }
     }
   }
 
-  def database = new MongoPersonRepository(Config.databaseName, "test")
-  def service = Service(database)
-  def application = new Application(service)
+  val brokenRepositoryException = new RuntimeException("Broken repository test")
 
-  def getByLocation(port: Int, longitude: Double, latitude: Double, radius: Long, status: Int = OK): JsValue =
-    getRequest(port, "getByLocation", status, "longitude" -> String.valueOf(longitude), "latitude" -> String.valueOf(latitude), "radius" -> String.valueOf(radius))
-  def saveRequest(port: Int, body: Map[String, Seq[String]], status: Int = OK): JsValue = postRequest(port, "save", status, body)
-  def getById(port: Int, id: String, status: Int = OK): JsValue = getRequest(port, "getById", status, "id" -> id)
-  def getByTime(port: Int, start: Long, end: Long, status: Int = OK): JsValue = 
-    getRequest(port, "getByTime", status, "start" -> String.valueOf(start), "end" -> String.valueOf(end))
-  def getByLocationAndTime(port: Int, longitude: Double, latitude: Double, start: Long, status: Int = OK): JsValue =
-    getRequest(port, "getByLocationAndTime", status, "longitude" -> String.valueOf(longitude), 
-                                                     "latitude" -> String.valueOf(latitude), 
-                                                     "start" -> String.valueOf(start))
+  def badRepository(broken: => Future[Nothing]): PersonRepository =
+    new PersonRepository {
+      def getById(id: String) = broken
+      def getByLocation(location: Location, radius: Long): Future[List[Person]] = broken
+      def getByTime(start: Long, end: Option[Long]): Future[List[Person]] = broken
+      def getByLocationAndTime(location: Location, radius: Long, start: Long, end: Option[Long]): Future[List[Person]] = broken
+      def save(person: Person): Future[Person] = broken
+    }
 
-  def postRequest(port: Int, url: String, status: Int, body: Map[String, Seq[String]]): JsValue = {
-    val reponse = WS.url(s"http://localhost:$port/$url").post(body)
-    parseResponse(reponse, status)
+  def badFutureService = {
+    val repository = badRepository(Future.failed(brokenRepositoryException))
+    new Service(new reactorService(repository))
   }
 
-  def getRequest(port: Int, url: String, status: Int, parameters: (String, String)*): JsValue = {
-    val request = WS.url(s"http://localhost:$port/$url").withQueryString(parameters:_*)
-    parseResponse(request.get, status)
+  def badCodeService = {
+    val repository = badRepository(throw brokenRepositoryException)
+    new Service(new reactorService(repository))
   }
 
-  def parseResponse(future: Future[Response], status: Int): JsValue = {
-    val response = Await.result(future, 10.seconds)
-    (response.json \ "status").as[Int] must beEqualTo(status)
-    response.json
-  }
+  def getByLocation(longitude: Double, latitude: Double, radius: Long): JsValue =
+    contentAsJson(executeGetAction(serviceController.byLocation(longitude, latitude, radius)))
+
+  def create(body: (String, String)*): JsValue =
+    contentAsJson(executePostAction(serviceController.create, body: _*))
+
+  def update(body: Map[String, String]): JsValue =
+    contentAsJson(executePostAction(serviceController.update, body))
+
+  def getById(id: String): JsValue =
+    contentAsJson(executeGetAction(serviceController.byId(id)))
+
+  def getByTime(start: Long, end: Long): JsValue =
+    contentAsJson(executeGetAction(serviceController.getByTime(start, Option(end))))
+
+  def getByLocationAndTime(longitude: Double, latitude: Double, start: Long): JsValue =
+    contentAsJson(executeGetAction(serviceController.getByLocationAndTime(longitude, latitude, start, None)))
+
+  val repository = new MemoryPersonRepository
+  val serviceReaktor = new reactorService(repository)
+  val serviceController = new Service(serviceReaktor)
 }
